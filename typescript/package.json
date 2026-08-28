@@ -1,0 +1,53 @@
+{
+  "name": "unit-aware-arithmetic",
+  "version": "1.0.0",
+  "description": "Type-safe dimensional arithmetic library with unit tracking",
+  "main": "dist/dimensional.js",
+  "types": "dist/dimensional.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "units",
+    "dimensions",
+    "physics",
+    "measurement",
+    "type-safe",
+    "dimensional-analysis"
+  ],
+  "author": "Parthiv Rawat <parthiv05022000@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@vitest/coverage-v8": "^1.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/parthivrawat/unit-aware-arithmetic"
+  },
+  "bugs": {
+    "url": "https://github.com/parthivrawat/unit-aware-arithmetic/issues"
+  },
+  "homepage": "https://github.com/parthivrawat/unit-aware-arithmetic#readme"
+}
