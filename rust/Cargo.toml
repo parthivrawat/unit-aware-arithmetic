@@ -1,6 +1,6 @@
 [package]
 name = "unit-aware-arithmetic"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["Parthiv Rawat <parthiv05022000@gmail.com>"]
 description = "Type-safe dimensional arithmetic library with unit tracking"

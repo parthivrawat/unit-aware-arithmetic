@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { Dimension, Unit, Quantity, units, IncompatibleUnitsError } from './dimensional';
+import { Dimension, Unit, Quantity, quantity, units, IncompatibleUnitsError, AffineUnitArithmeticError } from './dimensional';
 
 describe('Dimension', () => {
   it('should create a dimension', () => {
@@ -159,6 +159,43 @@ describe('Arithmetic', () => {
     expect(result.unit.dimension.length).toBe(2);
   });
 
+  it('should throw on multiplying affine units', () => {
+    const q1 = new Quantity(2, units.celsius);
+    const q2 = new Quantity(3, units.celsius);
+    expect(() => q1.multiply(q2)).toThrow(AffineUnitArithmeticError);
+  });
+
+  it('should throw on multiplying fahrenheit quantities', () => {
+    const q1 = new Quantity(2, units.fahrenheit);
+    const q2 = new Quantity(1, units.fahrenheit);
+    expect(() => q1.multiply(q2)).toThrow(AffineUnitArithmeticError);
+  });
+
+  it('should throw on dividing by an affine unit', () => {
+    const q1 = new Quantity(100, units.meter);
+    const q2 = new Quantity(2, units.celsius);
+    expect(() => q1.divide(q2)).toThrow(AffineUnitArithmeticError);
+  });
+
+  it('should throw on raising an affine unit to a power', () => {
+    const q = new Quantity(2, units.celsius);
+    expect(() => q.power(2)).toThrow(AffineUnitArithmeticError);
+  });
+
+  it('should allow scalar multiplication of affine units', () => {
+    const q = new Quantity(2, units.celsius);
+    const result = q.multiply(3);
+    expect(result.value).toBe(6);
+    expect(result.unit).toBe(units.celsius);
+  });
+
+  it('should allow scalar division of affine units', () => {
+    const q = new Quantity(10, units.celsius);
+    const result = q.divide(2);
+    expect(result.value).toBe(5);
+    expect(result.unit).toBe(units.celsius);
+  });
+
   it('should negate quantity', () => {
     const q = new Quantity(5, units.meter);
     const result = q.negate();
@@ -225,6 +262,48 @@ describe('Comparison', () => {
     const q1 = new Quantity(5, units.meter);
     const q2 = new Quantity(3, units.second);
     expect(() => q1.lessThan(q2)).toThrow(IncompatibleUnitsError);
+  });
+});
+
+describe('isClose', () => {
+  it('should be close with relative tolerance', () => {
+    const q1 = new Quantity(1, units.meter);
+    const q2 = new Quantity(1.0000001, units.meter);
+    // diff is 1e-7, so relTol must exceed ~1e-7 to be "close"
+    expect(q1.isClose(q2, 1e-9)).toBe(false);
+    expect(q1.isClose(q2, 1e-6)).toBe(true);
+  });
+
+  it('should be close with absolute tolerance', () => {
+    const q1 = new Quantity(1e-9, units.meter);
+    const q2 = new Quantity(2e-9, units.meter);
+    expect(q1.isClose(q2, 0.0, 1.5e-9)).toBe(true);
+  });
+
+  it('should be close relatively', () => {
+    const q1 = new Quantity(1e-9, units.meter);
+    const q2 = new Quantity(2e-9, units.meter);
+    // diff is 1e-9; relative tolerance must be >= 0.5 to cover it
+    expect(q1.isClose(q2, 1e-9)).toBe(false);
+    expect(q1.isClose(q2, 0.6)).toBe(true);
+  });
+
+  it('should not be close for different values', () => {
+    const q1 = new Quantity(5, units.meter);
+    const q2 = new Quantity(3, units.meter);
+    expect(q1.isClose(q2)).toBe(false);
+  });
+
+  it('should not be close for incompatible dimensions', () => {
+    const q1 = new Quantity(5, units.meter);
+    const q2 = new Quantity(5, units.second);
+    expect(q1.isClose(q2)).toBe(false);
+  });
+
+  it('should be close near zero with absolute tolerance', () => {
+    const q1 = new Quantity(0, units.meter);
+    const q2 = new Quantity(1e-12, units.meter);
+    expect(q1.isClose(q2, 1e-9, 1e-9)).toBe(true);
   });
 });
 
@@ -319,6 +398,66 @@ describe('Physics Examples', () => {
   });
 });
 
+describe('Canonical unit lookup', () => {
+  it('should canonicalize area from length multiplication', () => {
+    const result = new Quantity(5, units.meter).multiply(new Quantity(3, units.meter));
+    expect(result.value).toBeCloseTo(15);
+    expect(result.unit).toBe(units.squareMeter);
+  });
+
+  it('should canonicalize area from power', () => {
+    const result = new Quantity(3, units.meter).power(2);
+    expect(result.value).toBeCloseTo(9);
+    expect(result.unit).toBe(units.squareMeter);
+  });
+
+  it('should canonicalize velocity', () => {
+    const result = new Quantity(100, units.meter).divide(new Quantity(10, units.second));
+    expect(result.value).toBeCloseTo(10);
+    expect(result.unit).toBe(units.meterPerSecond);
+  });
+
+  it('should canonicalize force', () => {
+    const result = new Quantity(10, units.kilogram).multiply(
+      new Quantity(9.8, units.meterPerSecondSquared)
+    );
+    expect(result.value).toBeCloseTo(98);
+    expect(result.unit).toBe(units.newton);
+  });
+
+  it('should canonicalize kinetic energy', () => {
+    const mass = new Quantity(2, units.kilogram);
+    const velocity = new Quantity(10, units.meterPerSecond);
+    const result = mass.multiply(velocity.power(2)).multiply(0.5);
+    expect(result.value).toBeCloseTo(100);
+    expect(result.unit).toBe(units.joule);
+  });
+
+  it('should canonicalize power from kilojoule per second', () => {
+    const result = new Quantity(1, units.kilojoule).divide(new Quantity(1, units.second));
+    expect(result.value).toBeCloseTo(1000);
+    expect(result.unit).toBe(units.watt);
+  });
+
+  it('should canonicalize force from joule per meter', () => {
+    const result = new Quantity(1, units.joule).divide(new Quantity(1, units.meter));
+    expect(result.value).toBeCloseTo(1);
+    expect(result.unit).toBe(units.newton);
+  });
+
+  it('should canonicalize energy from force times length', () => {
+    const result = new Quantity(1, units.newton).multiply(new Quantity(1, units.meter));
+    expect(result.value).toBeCloseTo(1);
+    expect(result.unit).toBe(units.joule);
+  });
+
+  it('should canonicalize hertz from dimensionless per second', () => {
+    const result = new Quantity(1, units.dimensionless).divide(new Quantity(1, units.second));
+    expect(result.value).toBeCloseTo(1);
+    expect(result.unit).toBe(units.hertz);
+  });
+});
+
 describe('Edge Cases', () => {
   it('should handle zero quantity', () => {
     const q = new Quantity(0, units.meter);
@@ -338,5 +477,219 @@ describe('Edge Cases', () => {
   it('should handle very small quantity', () => {
     const q = new Quantity(1e-100, units.meter);
     expect(q.value).toBe(1e-100);
+  });
+});
+
+describe('quantity() factory', () => {
+  it('should create a quantity', () => {
+    const q = quantity(5, units.meter);
+    expect(q).toBeInstanceOf(Quantity);
+    expect(q.value).toBe(5);
+    expect(q.unit).toBe(units.meter);
+  });
+});
+
+describe('isCompatibleWith / in', () => {
+  it('should report compatible dimensions', () => {
+    expect(quantity(1, units.meter).isCompatibleWith(quantity(1, units.kilometer))).toBe(true);
+    expect(quantity(1, units.meter).isCompatibleWith(quantity(1, units.foot))).toBe(true);
+  });
+
+  it('should report incompatible dimensions', () => {
+    expect(quantity(1, units.meter).isCompatibleWith(quantity(1, units.second))).toBe(false);
+    expect(quantity(1, units.meter).isCompatibleWith(quantity(1, units.kilogram))).toBe(false);
+  });
+
+  it('should return numeric value in a target unit', () => {
+    expect(quantity(1, units.kilometer).in(units.meter)).toBeCloseTo(1000);
+    expect(quantity(1, units.hour).in(units.minute)).toBeCloseTo(60);
+  });
+
+  it('should throw on `in` with incompatible units', () => {
+    expect(() => quantity(5, units.meter).in(units.second)).toThrow(IncompatibleUnitsError);
+  });
+});
+
+describe('NaN and Infinity handling', () => {
+  it('should allow constructing a NaN quantity', () => {
+    const q = quantity(NaN, units.meter);
+    expect(Number.isNaN(q.value)).toBe(true);
+  });
+
+  it('should allow constructing an Infinity quantity', () => {
+    const q = quantity(Infinity, units.meter);
+    expect(q.value).toBe(Infinity);
+  });
+
+  it('should propagate NaN through arithmetic', () => {
+    const result = quantity(NaN, units.meter).add(quantity(1, units.meter));
+    expect(Number.isNaN(result.value)).toBe(true);
+  });
+
+  it('should propagate Infinity through arithmetic', () => {
+    const result = quantity(Infinity, units.meter).multiply(2);
+    expect(result.value).toBe(Infinity);
+  });
+
+  it('should produce NaN for Infinity minus Infinity', () => {
+    const result = quantity(Infinity, units.meter).subtract(quantity(Infinity, units.meter));
+    expect(Number.isNaN(result.value)).toBe(true);
+  });
+
+  it('should produce NaN for zero times Infinity', () => {
+    const result = quantity(Infinity, units.meter).multiply(0);
+    expect(Number.isNaN(result.value)).toBe(true);
+  });
+
+  it('should produce Infinity when dividing by zero', () => {
+    const result = quantity(1, units.meter).divide(0);
+    expect(result.value).toBe(Infinity);
+  });
+
+  it('should not equal a NaN quantity', () => {
+    const q = quantity(NaN, units.meter);
+    expect(q.equals(quantity(NaN, units.meter))).toBe(false);
+  });
+});
+
+describe('Fractional power errors', () => {
+  it('should throw on a fractional exponent', () => {
+    expect(() => quantity(4, units.meter).power(0.5)).toThrow('Fractional exponents');
+  });
+
+  it('should throw on a negative fractional exponent', () => {
+    expect(() => quantity(4, units.meter).power(-1.5)).toThrow('Fractional exponents');
+  });
+
+  it('should allow negative integer exponents', () => {
+    const result = quantity(2, units.meter).power(-1);
+    expect(result.value).toBeCloseTo(0.5);
+    expect(result.unit.dimension.length).toBe(-1);
+  });
+});
+
+describe('Left-scalar division (scalar / quantity)', () => {
+  it('should divide a scalar by a quantity via a dimensionless quantity', () => {
+    const result = quantity(1, units.dimensionless).divide(quantity(2, units.second));
+    expect(result.value).toBeCloseTo(0.5);
+    expect(result.unit).toBe(units.hertz);
+  });
+
+  it('should produce inverse dimensions for scalar / quantity', () => {
+    const result = quantity(10, units.dimensionless).divide(quantity(5, units.meterPerSecond));
+    expect(result.value).toBeCloseTo(2);
+    expect(result.unit.dimension.length).toBe(-1);
+    expect(result.unit.dimension.time).toBe(1);
+  });
+
+  it('should yield dimensionless result for scalar / scalar-quantity', () => {
+    const result = quantity(6, units.dimensionless).divide(quantity(3, units.dimensionless));
+    expect(result.value).toBe(2);
+    expect(result.unit.dimension.isDimensionless()).toBe(true);
+  });
+});
+
+describe('Angle units', () => {
+  it('should construct and convert angle units', () => {
+    expect(quantity(1, units.radian).in(units.degree)).toBeCloseTo(180 / Math.PI);
+    expect(quantity(360, units.degree).in(units.radian)).toBeCloseTo(2 * Math.PI);
+    expect(quantity(1, units.arcminute).in(units.degree)).toBeCloseTo(1 / 60);
+    expect(quantity(1, units.arcsecond).in(units.arcminute)).toBeCloseTo(1 / 60);
+  });
+});
+
+describe('Frequency units', () => {
+  it('should construct and convert frequency units', () => {
+    expect(quantity(1, units.kilohertz).in(units.hertz)).toBeCloseTo(1000);
+    expect(quantity(1, units.megahertz).in(units.hertz)).toBeCloseTo(1e6);
+    expect(quantity(1, units.hertz).in(units.megahertz)).toBeCloseTo(1e-6);
+  });
+});
+
+describe('Area and volume units', () => {
+  it('should construct and convert area units', () => {
+    expect(quantity(1, units.squareKilometer).in(units.squareMeter)).toBeCloseTo(1e6);
+    expect(quantity(1, units.hectare).in(units.squareMeter)).toBeCloseTo(1e4);
+    expect(quantity(1, units.squareMeter).in(units.hectare)).toBeCloseTo(1e-4);
+  });
+
+  it('should construct and convert volume units', () => {
+    expect(quantity(1, units.liter).in(units.cubicMeter)).toBeCloseTo(1e-3);
+    expect(quantity(1, units.milliliter).in(units.cubicMeter)).toBeCloseTo(1e-6);
+    expect(quantity(1, units.cubicMeter).in(units.liter)).toBeCloseTo(1000);
+  });
+
+  it('should derive square meter from length multiplication', () => {
+    const result = quantity(5, units.meter).multiply(quantity(3, units.meter));
+    expect(result.value).toBeCloseTo(15);
+    expect(result.unit).toBe(units.squareMeter);
+  });
+});
+
+describe('Velocity units', () => {
+  it('should construct and convert mile per hour', () => {
+    expect(quantity(1, units.milePerHour).in(units.meterPerSecond)).toBeCloseTo(0.44704);
+    expect(quantity(1, units.milePerHour).in(units.kilometerPerHour)).toBeCloseTo(1.609344);
+  });
+});
+
+describe('Chemistry units', () => {
+  it('should construct mole', () => {
+    expect(units.mole.symbol).toBe('mol');
+    expect(units.mole.dimension.amount).toBe(1);
+    expect(quantity(2, units.mole).in(units.mole)).toBeCloseTo(2);
+  });
+});
+
+describe('Energy units', () => {
+  it('should construct and convert energy units', () => {
+    expect(quantity(1, units.calorie).in(units.joule)).toBeCloseTo(4.184);
+    expect(quantity(1, units.kilocalorie).in(units.joule)).toBeCloseTo(4184);
+    expect(quantity(1, units.wattHour).in(units.joule)).toBeCloseTo(3600);
+    expect(quantity(1, units.kilojoule).in(units.wattHour)).toBeCloseTo(1000 / 3600);
+  });
+});
+
+describe('Electricity units', () => {
+  it('should construct and convert volts and ohms', () => {
+    expect(units.volt.symbol).toBe('V');
+    expect(units.ohm.symbol).toBe('Ω');
+    expect(units.volt.dimension).toEqual(new Dimension(2, 1, -3, -1));
+    expect(units.ohm.dimension).toEqual(new Dimension(2, 1, -3, -2));
+  });
+
+  it('should canonicalize derived electric units', () => {
+    const power = quantity(1, units.volt).multiply(quantity(1, units.ampere));
+    expect(power.unit).toBe(units.watt);
+    expect(power.value).toBeCloseTo(1);
+    const current = quantity(1, units.volt).divide(quantity(1, units.ohm));
+    expect(current.unit).toBe(units.ampere);
+    expect(current.value).toBeCloseTo(1);
+  });
+});
+
+describe('Derived canonicalization', () => {
+  it('should canonicalize joule seconds', () => {
+    const result = quantity(1, units.joule).multiply(quantity(1, units.second));
+    expect(result.value).toBeCloseTo(1);
+    expect(result.unit.dimension.length).toBe(2);
+    expect(result.unit.dimension.mass).toBe(1);
+    expect(result.unit.dimension.time).toBe(-1);
+  });
+
+  it('should canonicalize cubic meter from power', () => {
+    const result = quantity(3, units.meter).power(3);
+    expect(result.value).toBeCloseTo(27);
+    expect(result.unit).toBe(units.cubicMeter);
+  });
+
+  it('should canonicalize hertz from inverse second', () => {
+    const result = quantity(1, units.dimensionless).divide(quantity(1, units.second));
+    expect(result.unit).toBe(units.hertz);
+  });
+
+  it('should canonicalize mole as amount of substance', () => {
+    const result = quantity(1, units.mole);
+    expect(result.unit).toBe(units.mole);
   });
 });

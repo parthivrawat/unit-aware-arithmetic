@@ -95,6 +95,28 @@ export class Dimension {
       this.luminosity === other.luminosity
     );
   }
+
+  /**
+   * Check whether this dimension is compatible with another.
+   */
+  isCompatibleWith(other: Dimension): boolean {
+    return this.equals(other);
+  }
+
+  /**
+   * Return a string key for use in maps (comma-separated exponents).
+   */
+  toKey(): string {
+    return [
+      this.length,
+      this.mass,
+      this.time,
+      this.current,
+      this.temperature,
+      this.amount,
+      this.luminosity,
+    ].join(',');
+  }
 }
 
 /**
@@ -117,6 +139,20 @@ export class Unit {
       this.offset === other.offset
     );
   }
+
+  /**
+   * Convert a value in this unit to the base unit (handles affine units).
+   */
+  toBaseValue(value: number): number {
+    return (value + this.offset) * this.toBase;
+  }
+
+  /**
+   * Convert a value from the base unit to this unit.
+   */
+  fromBaseValue(value: number): number {
+    return value / this.toBase - this.offset;
+  }
 }
 
 /**
@@ -130,6 +166,16 @@ export class IncompatibleUnitsError extends Error {
 }
 
 /**
+ * Error thrown when multiplying, dividing, or powering an affine unit (e.g., °C, °F).
+ */
+export class AffineUnitArithmeticError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AffineUnitArithmeticError';
+  }
+}
+
+/**
  * A numeric value with an associated unit.
  */
 export class Quantity {
@@ -137,6 +183,16 @@ export class Quantity {
     public readonly value: number,
     public readonly unit: Unit
   ) {}
+
+  /**
+   * Throw IncompatibleUnitsError if the target does not have a compatible dimension.
+   */
+  private ensureCompatible(target: Unit | Quantity, message: string): void {
+    const dimension = target instanceof Quantity ? target.unit.dimension : target.dimension;
+    if (!this.unit.dimension.isCompatibleWith(dimension)) {
+      throw new IncompatibleUnitsError(message);
+    }
+  }
 
   toString(): string {
     return `${this.value} ${this.unit.symbol}`;
@@ -148,11 +204,10 @@ export class Quantity {
    * Add two quantities (must have compatible dimensions).
    */
   add(other: Quantity): Quantity {
-    if (!this.unit.dimension.equals(other.unit.dimension)) {
-      throw new IncompatibleUnitsError(
-        `Cannot add ${this.unit.symbol} and ${other.unit.symbol}: incompatible dimensions`
-      );
-    }
+    this.ensureCompatible(
+      other,
+      `Cannot add ${this.unit.symbol} and ${other.unit.symbol}: incompatible dimensions`
+    );
 
     const otherInSelfUnit = other.to(this.unit);
     return new Quantity(this.value + otherInSelfUnit.value, this.unit);
@@ -162,11 +217,10 @@ export class Quantity {
    * Subtract two quantities (must have compatible dimensions).
    */
   subtract(other: Quantity): Quantity {
-    if (!this.unit.dimension.equals(other.unit.dimension)) {
-      throw new IncompatibleUnitsError(
-        `Cannot subtract ${other.unit.symbol} from ${this.unit.symbol}: incompatible dimensions`
-      );
-    }
+    this.ensureCompatible(
+      other,
+      `Cannot subtract ${other.unit.symbol} from ${this.unit.symbol}: incompatible dimensions`
+    );
 
     const otherInSelfUnit = other.to(this.unit);
     return new Quantity(this.value - otherInSelfUnit.value, this.unit);
@@ -175,70 +229,115 @@ export class Quantity {
   /**
    * Multiply quantity by another quantity or scalar.
    */
+  multiply(other: number): Quantity;
+  multiply(other: Quantity): Quantity;
   multiply(other: Quantity | number): Quantity {
     if (typeof other === 'number') {
       return new Quantity(this.value * other, this.unit);
     }
 
-    // Multiply values and dimensions
-    const newValue = this.value * other.value;
+    if (this.unit.offset !== 0 || other.unit.offset !== 0) {
+      throw new AffineUnitArithmeticError(
+        `Cannot multiply affine units ${this.unit.symbol} and ${other.unit.symbol}; ` +
+        `convert to an absolute (zero-offset) unit first.`
+      );
+    }
+
+    // Convert both operands to base units, then combine
+    const base = this.unit.toBaseValue(this.value) * other.unit.toBaseValue(other.value);
     const newDimension = this.unit.dimension.multiply(other.unit.dimension);
 
+    const canonical = CANONICAL_UNITS[newDimension.toKey()];
+    if (canonical !== undefined) {
+      return new Quantity(canonical.fromBaseValue(base), canonical);
+    }
+
     // Create a derived unit
+    const generatedToBase = this.unit.toBase * other.unit.toBase;
     const newSymbol = `${this.unit.symbol}·${other.unit.symbol}`;
     const newUnit = new Unit(
       `${this.unit.name} ${other.unit.name}`,
       newSymbol,
       newDimension,
-      this.unit.toBase * other.unit.toBase
+      generatedToBase
     );
 
-    return new Quantity(newValue, newUnit);
+    return new Quantity(newUnit.fromBaseValue(base), newUnit);
   }
 
   /**
    * Divide quantity by another quantity or scalar.
    */
+  divide(other: number): Quantity;
+  divide(other: Quantity): Quantity;
   divide(other: Quantity | number): Quantity {
     if (typeof other === 'number') {
       return new Quantity(this.value / other, this.unit);
     }
 
-    // Divide values and dimensions
-    const newValue = this.value / other.value;
+    if (this.unit.offset !== 0 || other.unit.offset !== 0) {
+      throw new AffineUnitArithmeticError(
+        `Cannot divide affine units ${this.unit.symbol} and ${other.unit.symbol}; ` +
+        `convert to an absolute (zero-offset) unit first.`
+      );
+    }
+
+    // Convert both operands to base units, then combine
+    const base = this.unit.toBaseValue(this.value) / other.unit.toBaseValue(other.value);
     const newDimension = this.unit.dimension.divide(other.unit.dimension);
 
+    const canonical = CANONICAL_UNITS[newDimension.toKey()];
+    if (canonical !== undefined) {
+      return new Quantity(canonical.fromBaseValue(base), canonical);
+    }
+
     // Create a derived unit
+    const generatedToBase = this.unit.toBase / other.unit.toBase;
     const newSymbol = `${this.unit.symbol}/${other.unit.symbol}`;
     const newUnit = new Unit(
       `${this.unit.name} per ${other.unit.name}`,
       newSymbol,
       newDimension,
-      this.unit.toBase / other.unit.toBase
+      generatedToBase
     );
 
-    return new Quantity(newValue, newUnit);
+    return new Quantity(newUnit.fromBaseValue(base), newUnit);
   }
 
   /**
    * Raise quantity to a power.
    */
   power(exponent: number): Quantity {
+    if (this.unit.offset !== 0) {
+      throw new AffineUnitArithmeticError(
+        `Cannot raise affine unit ${this.unit.symbol} to a power; ` +
+        `convert to an absolute (zero-offset) unit first.`
+      );
+    }
+
     if (!Number.isInteger(exponent)) {
       throw new Error('Fractional exponents not yet supported');
     }
 
-    const newValue = Math.pow(this.value, exponent);
+    // Convert to base units before raising to a power
+    const base = Math.pow(this.unit.toBaseValue(this.value), exponent);
     const newDimension = this.unit.dimension.power(exponent);
+
+    const canonical = CANONICAL_UNITS[newDimension.toKey()];
+    if (canonical !== undefined) {
+      return new Quantity(canonical.fromBaseValue(base), canonical);
+    }
+
+    const generatedToBase = Math.pow(this.unit.toBase, exponent);
     const newSymbol = `${this.unit.symbol}^${exponent}`;
     const newUnit = new Unit(
       `${this.unit.name} to the power ${exponent}`,
       newSymbol,
       newDimension,
-      Math.pow(this.unit.toBase, exponent)
+      generatedToBase
     );
 
-    return new Quantity(newValue, newUnit);
+    return new Quantity(newUnit.fromBaseValue(base), newUnit);
   }
 
   /**
@@ -258,26 +357,54 @@ export class Quantity {
   // Comparison operations
 
   /**
-   * Check equality with another quantity.
+   * Check strict equality with another quantity: exact value comparison
+   * after conversion to a common unit. Use `isClose` for tolerance-based
+   * comparison.
    */
-  equals(other: Quantity, tolerance: number = 1e-9): boolean {
+  equals(other: Quantity): boolean {
     if (!this.unit.dimension.equals(other.unit.dimension)) {
       return false;
     }
 
     const otherInSelfUnit = other.to(this.unit);
-    return Math.abs(this.value - otherInSelfUnit.value) < tolerance;
+    return this.value === otherInSelfUnit.value;
+  }
+
+  /**
+   * Check approximate equality with another quantity.
+   *
+   * Returns false for incompatible dimensions. Otherwise converts `other`
+   * to this quantity's unit and applies relative/absolute tolerances
+   * (same semantics as Python's `math.isclose`):
+   * `diff <= absTol || diff <= relTol * max(|a|, |b|)`.
+   */
+  isClose(other: Quantity, relTol: number = 1e-9, absTol: number = 0.0): boolean {
+    if (!this.unit.dimension.equals(other.unit.dimension)) {
+      return false;
+    }
+
+    const otherInSelfUnit = other.to(this.unit);
+    if (this.value === otherInSelfUnit.value) {
+      return true;
+    }
+    if (!Number.isFinite(this.value) || !Number.isFinite(otherInSelfUnit.value)) {
+      return false;
+    }
+    const diff = Math.abs(this.value - otherInSelfUnit.value);
+    return (
+      diff <= absTol ||
+      diff <= relTol * Math.max(Math.abs(this.value), Math.abs(otherInSelfUnit.value))
+    );
   }
 
   /**
    * Check if less than another quantity.
    */
   lessThan(other: Quantity): boolean {
-    if (!this.unit.dimension.equals(other.unit.dimension)) {
-      throw new IncompatibleUnitsError(
-        `Cannot compare ${this.unit.symbol} and ${other.unit.symbol}`
-      );
-    }
+    this.ensureCompatible(
+      other,
+      `Cannot compare ${this.unit.symbol} and ${other.unit.symbol}`
+    );
 
     const otherInSelfUnit = other.to(this.unit);
     return this.value < otherInSelfUnit.value;
@@ -307,29 +434,44 @@ export class Quantity {
   // Unit conversion
 
   /**
+   * Check whether another quantity has a compatible dimension
+   * (i.e., can be added, subtracted, compared, or converted).
+   */
+  isCompatibleWith(other: Quantity): boolean {
+    return this.unit.dimension.isCompatibleWith(other.unit.dimension);
+  }
+
+  /**
+   * Get this quantity's numeric value expressed in a target unit.
+   * Throws `IncompatibleUnitsError` for incompatible dimensions.
+   */
+  in(targetUnit: Unit): number {
+    return this.to(targetUnit).value;
+  }
+
+  /**
    * Convert to another unit (must have compatible dimensions).
    */
   to(targetUnit: Unit): Quantity {
-    if (!this.unit.dimension.equals(targetUnit.dimension)) {
-      throw new IncompatibleUnitsError(
-        `Cannot convert ${this.unit.symbol} to ${targetUnit.symbol}: incompatible dimensions`
-      );
-    }
+    this.ensureCompatible(
+      targetUnit,
+      `Cannot convert ${this.unit.symbol} to ${targetUnit.symbol}: incompatible dimensions`
+    );
 
-    // Handle affine conversions (e.g., temperature)
-    let newValue: number;
-    if (this.unit.offset !== 0 || targetUnit.offset !== 0) {
-      // Convert to base unit first (remove offset)
-      const baseValue = (this.value + this.unit.offset) * this.unit.toBase;
-      // Convert from base to target (apply offset)
-      newValue = baseValue / targetUnit.toBase - targetUnit.offset;
-    } else {
-      // Simple linear conversion
-      newValue = this.value * (this.unit.toBase / targetUnit.toBase);
-    }
+    const baseValue = this.unit.toBaseValue(this.value);
+    const newValue = targetUnit.fromBaseValue(baseValue);
 
     return new Quantity(newValue, targetUnit);
   }
+}
+
+/**
+ * Convenience factory for creating a `Quantity`.
+ *
+ * Example: `const q = quantity(5, units.meter);`
+ */
+export function quantity(value: number, unit: Unit): Quantity {
+  return new Quantity(value, unit);
 }
 
 // ============================================================================
@@ -343,6 +485,12 @@ export const units = {
   // Dimensionless
   dimensionless: new Unit('dimensionless', '', new Dimension()),
 
+  // Angle (dimensionless)
+  radian: new Unit('radian', 'rad', new Dimension()),
+  degree: new Unit('degree', '°', new Dimension(), Math.PI / 180.0),
+  arcminute: new Unit('arcminute', '′', new Dimension(), Math.PI / 10800.0),
+  arcsecond: new Unit('arcsecond', '″', new Dimension(), Math.PI / 648000.0),
+
   // Length
   meter: new Unit('meter', 'm', new Dimension(1)),
   kilometer: new Unit('kilometer', 'km', new Dimension(1), 1000.0),
@@ -353,7 +501,7 @@ export const units = {
   inch: new Unit('inch', 'in', new Dimension(1), 0.0254),
   foot: new Unit('foot', 'ft', new Dimension(1), 0.3048),
   yard: new Unit('yard', 'yd', new Dimension(1), 0.9144),
-  mile: new Unit('mile', 'mi', new Dimension(1), 1609.34),
+  mile: new Unit('mile', 'mi', new Dimension(1), 1609.344),
 
   // Mass
   kilogram: new Unit('kilogram', 'kg', new Dimension(0, 1)),
@@ -380,6 +528,12 @@ export const units = {
   ampere: new Unit('ampere', 'A', new Dimension(0, 0, 0, 1)),
   milliampere: new Unit('milliampere', 'mA', new Dimension(0, 0, 0, 1), 0.001),
 
+  // Amount of substance
+  mole: new Unit('mole', 'mol', new Dimension(0, 0, 0, 0, 0, 1)),
+
+  // Luminous intensity
+  candela: new Unit('candela', 'cd', new Dimension(0, 0, 0, 0, 0, 0, 1)),
+
   // Derived units
 
   // Force (kg·m/s²)
@@ -388,6 +542,9 @@ export const units = {
   // Energy (kg·m²/s²)
   joule: new Unit('joule', 'J', new Dimension(2, 1, -2)),
   kilojoule: new Unit('kilojoule', 'kJ', new Dimension(2, 1, -2), 1000.0),
+  calorie: new Unit('calorie', 'cal', new Dimension(2, 1, -2), 4.184),
+  kilocalorie: new Unit('kilocalorie', 'kcal', new Dimension(2, 1, -2), 4184.0),
+  wattHour: new Unit('watt hour', 'Wh', new Dimension(2, 1, -2), 3600.0),
 
   // Power (kg·m²/s³)
   watt: new Unit('watt', 'W', new Dimension(2, 1, -3)),
@@ -397,10 +554,40 @@ export const units = {
   pascal: new Unit('pascal', 'Pa', new Dimension(-1, 1, -2)),
   kilopascal: new Unit('kilopascal', 'kPa', new Dimension(-1, 1, -2), 1000.0),
 
+  // Electricity
+  volt: new Unit('volt', 'V', new Dimension(2, 1, -3, -1)),
+  ohm: new Unit('ohm', 'Ω', new Dimension(2, 1, -3, -2)),
+  coulomb: new Unit('coulomb', 'C', new Dimension(0, 0, 1, 1)),
+
   // Velocity (m/s)
   meterPerSecond: new Unit('meter per second', 'm/s', new Dimension(1, 0, -1)),
   kilometerPerHour: new Unit('kilometer per hour', 'km/h', new Dimension(1, 0, -1), 1000.0 / 3600.0),
+  milePerHour: new Unit('mile per hour', 'mph', new Dimension(1, 0, -1), 1609.344 / 3600.0),
 
   // Acceleration (m/s²)
   meterPerSecondSquared: new Unit('meter per second squared', 'm/s²', new Dimension(1, 0, -2)),
+
+  // Area and volume
+  squareMeter: new Unit('square meter', 'm²', new Dimension(2)),
+  squareKilometer: new Unit('square kilometer', 'km²', new Dimension(2), 1e6),
+  hectare: new Unit('hectare', 'ha', new Dimension(2), 1e4),
+  cubicMeter: new Unit('cubic meter', 'm³', new Dimension(3)),
+  liter: new Unit('liter', 'L', new Dimension(3), 1e-3),
+  milliliter: new Unit('milliliter', 'mL', new Dimension(3), 1e-6),
+
+  // Frequency
+  hertz: new Unit('hertz', 'Hz', new Dimension(0, 0, -1)),
+  kilohertz: new Unit('kilohertz', 'kHz', new Dimension(0, 0, -1), 1e3),
+  megahertz: new Unit('megahertz', 'MHz', new Dimension(0, 0, -1), 1e6),
 } as const;
+
+// Canonical SI/base units keyed by dimension (built from every zero-offset, toBase==1.0 unit)
+const CANONICAL_UNITS: Record<string, Unit> = Object.values(units)
+  .filter((u): u is Unit => u instanceof Unit && u.toBase === 1.0 && u.offset === 0.0)
+  .reduce((acc, u) => {
+    acc[u.dimension.toKey()] = u;
+    return acc;
+  }, {} as Record<string, Unit>);
+
+// Preserve dimensionless as the canonical dimensionless unit (radian also has toBase 1)
+CANONICAL_UNITS[new Dimension().toKey()] = units.dimensionless;

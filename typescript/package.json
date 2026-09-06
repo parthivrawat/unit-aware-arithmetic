@@ -1,6 +1,6 @@
 {
   "name": "unit-aware-arithmetic",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Type-safe dimensional arithmetic library with unit tracking",
   "main": "dist/dimensional.js",
   "types": "dist/dimensional.d.ts",
@@ -9,8 +9,9 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "npm run build && node ../benchmarks/bench_typescript.js",
     "test:coverage": "vitest run --coverage",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "format": "prettier --write \"src/**/*.ts\"",
     "prepublishOnly": "npm run build"
   },
@@ -29,7 +30,7 @@
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
     "@vitest/coverage-v8": "^1.0.0",
-    "eslint": "^8.0.0",
+    "eslint": "^8.57.0",
     "prettier": "^3.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"

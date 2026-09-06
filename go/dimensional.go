@@ -78,6 +78,11 @@ func (d Dimension) Equals(other Dimension) bool {
 		d.Luminosity == other.Luminosity
 }
 
+// IsCompatibleWith reports whether two dimensions are equal (i.e., compatible).
+func (d Dimension) IsCompatibleWith(other Dimension) bool {
+	return d.Equals(other)
+}
+
 // Unit represents a unit of measurement with its dimension and conversion factor.
 type Unit struct {
 	Name      string
@@ -98,6 +103,16 @@ func NewUnit(name, symbol string, dimension Dimension, toBase, offset float64) U
 	}
 }
 
+// ToBaseValue converts a value in this unit to the base (zero-offset) unit.
+func (u Unit) ToBaseValue(v float64) float64 {
+	return (v + u.Offset) * u.ToBase
+}
+
+// FromBaseValue converts a value from the base (zero-offset) unit to this unit.
+func (u Unit) FromBaseValue(v float64) float64 {
+	return v/u.ToBase - u.Offset
+}
+
 // IncompatibleUnitsError is returned when attempting incompatible unit operations.
 type IncompatibleUnitsError struct {
 	Message string
@@ -107,197 +122,287 @@ func (e *IncompatibleUnitsError) Error() string {
 	return e.Message
 }
 
+// AffineUnitArithmeticError is raised when attempting arithmetic that is
+// undefined for affine (offset) units such as Celsius or Fahrenheit.
+type AffineUnitArithmeticError struct {
+	Message string
+}
+
+func (e *AffineUnitArithmeticError) Error() string {
+	return e.Message
+}
+
 // Quantity represents a numeric value with an associated unit.
+// Its fields are unexported; use Value() and Unit() to access them.
 type Quantity struct {
-	Value float64
-	Unit  Unit
+	value float64
+	unit  Unit
 }
 
 // NewQuantity creates a new quantity.
 func NewQuantity(value float64, unit Unit) Quantity {
-	return Quantity{Value: value, Unit: unit}
+	return Quantity{value: value, unit: unit}
+}
+
+// Value returns the numeric value of the quantity.
+func (q Quantity) Value() float64 {
+	return q.value
+}
+
+// Unit returns the unit of the quantity.
+func (q Quantity) Unit() Unit {
+	return q.unit
 }
 
 // String returns a string representation of the quantity.
 func (q Quantity) String() string {
-	return fmt.Sprintf("%g %s", q.Value, q.Unit.Symbol)
+	return fmt.Sprintf("%g %s", q.value, q.unit.Symbol)
+}
+
+// ensureCompatible returns an IncompatibleUnitsError if the two quantities' dimensions differ.
+func (q Quantity) ensureCompatible(other Quantity, message string) *IncompatibleUnitsError {
+	if !q.unit.Dimension.IsCompatibleWith(other.unit.Dimension) {
+		return &IncompatibleUnitsError{Message: message}
+	}
+	return nil
 }
 
 // Add adds two quantities (must have compatible dimensions).
 func (q Quantity) Add(other Quantity) (Quantity, error) {
-	if !q.Unit.Dimension.Equals(other.Unit.Dimension) {
-		return Quantity{}, &IncompatibleUnitsError{
-			Message: fmt.Sprintf("Cannot add %s and %s: incompatible dimensions",
-				q.Unit.Symbol, other.Unit.Symbol),
-		}
+	if err := q.ensureCompatible(other, fmt.Sprintf("Cannot add %s and %s: incompatible dimensions",
+		q.unit.Symbol, other.unit.Symbol)); err != nil {
+		return Quantity{}, err
 	}
 
-	otherInSelfUnit, err := other.To(q.Unit)
+	otherInSelfUnit, err := other.To(q.unit)
 	if err != nil {
 		return Quantity{}, err
 	}
 
-	return Quantity{Value: q.Value + otherInSelfUnit.Value, Unit: q.Unit}, nil
+	return Quantity{value: q.value + otherInSelfUnit.value, unit: q.unit}, nil
 }
 
 // Subtract subtracts two quantities (must have compatible dimensions).
 func (q Quantity) Subtract(other Quantity) (Quantity, error) {
-	if !q.Unit.Dimension.Equals(other.Unit.Dimension) {
-		return Quantity{}, &IncompatibleUnitsError{
-			Message: fmt.Sprintf("Cannot subtract %s from %s: incompatible dimensions",
-				other.Unit.Symbol, q.Unit.Symbol),
-		}
+	if err := q.ensureCompatible(other, fmt.Sprintf("Cannot subtract %s from %s: incompatible dimensions",
+		other.unit.Symbol, q.unit.Symbol)); err != nil {
+		return Quantity{}, err
 	}
 
-	otherInSelfUnit, err := other.To(q.Unit)
+	otherInSelfUnit, err := other.To(q.unit)
 	if err != nil {
 		return Quantity{}, err
 	}
 
-	return Quantity{Value: q.Value - otherInSelfUnit.Value, Unit: q.Unit}, nil
+	return Quantity{value: q.value - otherInSelfUnit.value, unit: q.unit}, nil
 }
 
-// Multiply multiplies a quantity by another quantity or scalar.
-func (q Quantity) Multiply(other interface{}) Quantity {
-	switch v := other.(type) {
-	case float64:
-		return Quantity{Value: q.Value * v, Unit: q.Unit}
-	case int:
-		return Quantity{Value: q.Value * float64(v), Unit: q.Unit}
-	case Quantity:
-		newValue := q.Value * v.Value
-		newDimension := q.Unit.Dimension.Multiply(v.Unit.Dimension)
-		newSymbol := fmt.Sprintf("%s·%s", q.Unit.Symbol, v.Unit.Symbol)
-		newUnit := NewUnit(
-			fmt.Sprintf("%s %s", q.Unit.Name, v.Unit.Name),
-			newSymbol,
-			newDimension,
-			q.Unit.ToBase*v.Unit.ToBase,
-			0,
-		)
-		return Quantity{Value: newValue, Unit: newUnit}
-	default:
-		panic(fmt.Sprintf("Cannot multiply Quantity by %T", other))
+// Multiply multiplies a quantity by another quantity, producing a derived unit.
+// It returns an *AffineUnitArithmeticError if either unit is affine
+// (has a non-zero Offset, e.g., Celsius or Fahrenheit).
+func (q Quantity) Multiply(other Quantity) (Quantity, error) {
+	if q.unit.Offset != 0 || other.unit.Offset != 0 {
+		return Quantity{}, &AffineUnitArithmeticError{
+			Message: fmt.Sprintf("Cannot multiply affine units %s and %s; convert to an absolute (zero-offset) unit first.",
+				q.unit.Symbol, other.unit.Symbol),
+		}
 	}
+	baseValue := q.unit.ToBaseValue(q.value) * other.unit.ToBaseValue(other.value)
+	newDimension := q.unit.Dimension.Multiply(other.unit.Dimension)
+	if canon, ok := canonicalUnits[newDimension]; ok {
+		return Quantity{value: canon.FromBaseValue(baseValue), unit: canon}, nil
+	}
+	newSymbol := fmt.Sprintf("%s·%s", q.unit.Symbol, other.unit.Symbol)
+	newUnit := NewUnit(
+		fmt.Sprintf("%s %s", q.unit.Name, other.unit.Name),
+		newSymbol,
+		newDimension,
+		q.unit.ToBase*other.unit.ToBase,
+		0,
+	)
+	return Quantity{value: newUnit.FromBaseValue(baseValue), unit: newUnit}, nil
 }
 
-// Divide divides a quantity by another quantity or scalar.
-func (q Quantity) Divide(other interface{}) Quantity {
-	switch v := other.(type) {
-	case float64:
-		return Quantity{Value: q.Value / v, Unit: q.Unit}
-	case int:
-		return Quantity{Value: q.Value / float64(v), Unit: q.Unit}
-	case Quantity:
-		newValue := q.Value / v.Value
-		newDimension := q.Unit.Dimension.Divide(v.Unit.Dimension)
-		newSymbol := fmt.Sprintf("%s/%s", q.Unit.Symbol, v.Unit.Symbol)
-		newUnit := NewUnit(
-			fmt.Sprintf("%s per %s", q.Unit.Name, v.Unit.Name),
-			newSymbol,
-			newDimension,
-			q.Unit.ToBase/v.Unit.ToBase,
-			0,
-		)
-		return Quantity{Value: newValue, Unit: newUnit}
-	default:
-		panic(fmt.Sprintf("Cannot divide Quantity by %T", other))
+// MultiplyScalar multiplies a quantity by a scalar factor.
+func (q Quantity) MultiplyScalar(f float64) Quantity {
+	return Quantity{value: q.value * f, unit: q.unit}
+}
+
+// Divide divides a quantity by another quantity, producing a derived unit.
+// It returns an *AffineUnitArithmeticError if either unit is affine
+// (has a non-zero Offset, e.g., Celsius or Fahrenheit).
+func (q Quantity) Divide(other Quantity) (Quantity, error) {
+	if q.unit.Offset != 0 || other.unit.Offset != 0 {
+		return Quantity{}, &AffineUnitArithmeticError{
+			Message: fmt.Sprintf("Cannot divide affine units %s and %s; convert to an absolute (zero-offset) unit first.",
+				q.unit.Symbol, other.unit.Symbol),
+		}
 	}
+	baseValue := q.unit.ToBaseValue(q.value) / other.unit.ToBaseValue(other.value)
+	newDimension := q.unit.Dimension.Divide(other.unit.Dimension)
+	if canon, ok := canonicalUnits[newDimension]; ok {
+		return Quantity{value: canon.FromBaseValue(baseValue), unit: canon}, nil
+	}
+	newSymbol := fmt.Sprintf("%s/%s", q.unit.Symbol, other.unit.Symbol)
+	newUnit := NewUnit(
+		fmt.Sprintf("%s per %s", q.unit.Name, other.unit.Name),
+		newSymbol,
+		newDimension,
+		q.unit.ToBase/other.unit.ToBase,
+		0,
+	)
+	return Quantity{value: newUnit.FromBaseValue(baseValue), unit: newUnit}, nil
+}
+
+// DivideScalar divides a quantity by a scalar factor.
+func (q Quantity) DivideScalar(f float64) Quantity {
+	return Quantity{value: q.value / f, unit: q.unit}
 }
 
 // Power raises a quantity to an integer power.
-func (q Quantity) Power(exponent int) Quantity {
-	newValue := math.Pow(q.Value, float64(exponent))
-	newDimension := q.Unit.Dimension.Power(exponent)
-	newSymbol := fmt.Sprintf("%s^%d", q.Unit.Symbol, exponent)
+// It returns an *AffineUnitArithmeticError if the unit is affine
+// (has a non-zero Offset, e.g., Celsius or Fahrenheit).
+func (q Quantity) Power(exponent int) (Quantity, error) {
+	if q.unit.Offset != 0 {
+		return Quantity{}, &AffineUnitArithmeticError{
+			Message: fmt.Sprintf("Cannot raise affine unit %s to a power; convert to an absolute (zero-offset) unit first.",
+				q.unit.Symbol),
+		}
+	}
+	baseValue := math.Pow(q.unit.ToBaseValue(q.value), float64(exponent))
+	newDimension := q.unit.Dimension.Power(exponent)
+	if canon, ok := canonicalUnits[newDimension]; ok {
+		return Quantity{value: canon.FromBaseValue(baseValue), unit: canon}, nil
+	}
+	newSymbol := fmt.Sprintf("%s^%d", q.unit.Symbol, exponent)
 	newUnit := NewUnit(
-		fmt.Sprintf("%s to the power %d", q.Unit.Name, exponent),
+		fmt.Sprintf("%s to the power %d", q.unit.Name, exponent),
 		newSymbol,
 		newDimension,
-		math.Pow(q.Unit.ToBase, float64(exponent)),
+		math.Pow(q.unit.ToBase, float64(exponent)),
 		0,
 	)
-	return Quantity{Value: newValue, Unit: newUnit}
+	return Quantity{value: newUnit.FromBaseValue(baseValue), unit: newUnit}, nil
 }
 
 // Negate negates a quantity.
 func (q Quantity) Negate() Quantity {
-	return Quantity{Value: -q.Value, Unit: q.Unit}
+	return Quantity{value: -q.value, unit: q.unit}
 }
 
 // Abs returns the absolute value.
 func (q Quantity) Abs() Quantity {
-	return Quantity{Value: math.Abs(q.Value), Unit: q.Unit}
+	return Quantity{value: math.Abs(q.value), unit: q.unit}
 }
 
-// Equals checks if two quantities are equal (with tolerance).
+// Equals checks if two quantities are equal within an absolute tolerance.
 func (q Quantity) Equals(other Quantity, tolerance float64) bool {
-	if !q.Unit.Dimension.Equals(other.Unit.Dimension) {
+	if !q.unit.Dimension.IsCompatibleWith(other.unit.Dimension) {
 		return false
 	}
 
-	otherInSelfUnit, err := other.To(q.Unit)
+	otherInSelfUnit, err := other.To(q.unit)
 	if err != nil {
 		return false
 	}
 
-	return math.Abs(q.Value-otherInSelfUnit.Value) < tolerance
+	return math.Abs(q.value-otherInSelfUnit.value) < tolerance
+}
+
+// IsClose checks if two quantities are close within a relative or absolute tolerance.
+func (q Quantity) IsClose(other Quantity, relTol, absTol float64) (bool, error) {
+	if err := q.ensureCompatible(other, fmt.Sprintf("Cannot compare %s and %s", q.unit.Symbol, other.unit.Symbol)); err != nil {
+		return false, err
+	}
+
+	otherInSelfUnit, err := other.To(q.unit)
+	if err != nil {
+		return false, err
+	}
+
+	if q.value == otherInSelfUnit.value {
+		return true, nil
+	}
+
+	if math.IsNaN(q.value) || math.IsNaN(otherInSelfUnit.value) ||
+		math.IsInf(q.value, 0) || math.IsInf(otherInSelfUnit.value, 0) {
+		return false, nil
+	}
+
+	diff := math.Abs(q.value - otherInSelfUnit.value)
+	max := math.Max(math.Abs(q.value), math.Abs(otherInSelfUnit.value))
+	return diff <= absTol || diff <= relTol*max, nil
 }
 
 // LessThan checks if this quantity is less than another.
 func (q Quantity) LessThan(other Quantity) (bool, error) {
-	if !q.Unit.Dimension.Equals(other.Unit.Dimension) {
-		return false, &IncompatibleUnitsError{
-			Message: fmt.Sprintf("Cannot compare %s and %s", q.Unit.Symbol, other.Unit.Symbol),
-		}
+	if err := q.ensureCompatible(other, fmt.Sprintf("Cannot compare %s and %s", q.unit.Symbol, other.unit.Symbol)); err != nil {
+		return false, err
 	}
 
-	otherInSelfUnit, err := other.To(q.Unit)
+	otherInSelfUnit, err := other.To(q.unit)
 	if err != nil {
 		return false, err
 	}
 
-	return q.Value < otherInSelfUnit.Value, nil
+	return q.value < otherInSelfUnit.value, nil
 }
 
 // GreaterThan checks if this quantity is greater than another.
 func (q Quantity) GreaterThan(other Quantity) (bool, error) {
-	if !q.Unit.Dimension.Equals(other.Unit.Dimension) {
-		return false, &IncompatibleUnitsError{
-			Message: fmt.Sprintf("Cannot compare %s and %s", q.Unit.Symbol, other.Unit.Symbol),
-		}
+	if err := q.ensureCompatible(other, fmt.Sprintf("Cannot compare %s and %s", q.unit.Symbol, other.unit.Symbol)); err != nil {
+		return false, err
 	}
 
-	otherInSelfUnit, err := other.To(q.Unit)
+	otherInSelfUnit, err := other.To(q.unit)
 	if err != nil {
 		return false, err
 	}
 
-	return q.Value > otherInSelfUnit.Value, nil
+	return q.value > otherInSelfUnit.value, nil
+}
+
+// LessThanOrEqual checks if this quantity is less than or equal to another (with tolerance).
+func (q Quantity) LessThanOrEqual(other Quantity, tolerance float64) (bool, error) {
+	less, err := q.LessThan(other)
+	if err != nil {
+		return false, err
+	}
+
+	isClose, err := q.IsClose(other, 0.0, tolerance)
+	if err != nil {
+		return false, err
+	}
+
+	return less || isClose, nil
+}
+
+// GreaterThanOrEqual checks if this quantity is greater than or equal to another (with tolerance).
+func (q Quantity) GreaterThanOrEqual(other Quantity, tolerance float64) (bool, error) {
+	greater, err := q.GreaterThan(other)
+	if err != nil {
+		return false, err
+	}
+
+	isClose, err := q.IsClose(other, 0.0, tolerance)
+	if err != nil {
+		return false, err
+	}
+
+	return greater || isClose, nil
 }
 
 // To converts to another unit (must have compatible dimensions).
 func (q Quantity) To(targetUnit Unit) (Quantity, error) {
-	if !q.Unit.Dimension.Equals(targetUnit.Dimension) {
+	if !q.unit.Dimension.IsCompatibleWith(targetUnit.Dimension) {
 		return Quantity{}, &IncompatibleUnitsError{
 			Message: fmt.Sprintf("Cannot convert %s to %s: incompatible dimensions",
-				q.Unit.Symbol, targetUnit.Symbol),
+				q.unit.Symbol, targetUnit.Symbol),
 		}
 	}
 
-	var newValue float64
-	// Handle affine conversions (e.g., temperature)
-	if q.Unit.Offset != 0 || targetUnit.Offset != 0 {
-		// Convert to base unit first (remove offset)
-		baseValue := (q.Value + q.Unit.Offset) * q.Unit.ToBase
-		// Convert from base to target (apply offset)
-		newValue = baseValue/targetUnit.ToBase - targetUnit.Offset
-	} else {
-		// Simple linear conversion
-		newValue = q.Value * (q.Unit.ToBase / targetUnit.ToBase)
-	}
-
-	return Quantity{Value: newValue, Unit: targetUnit}, nil
+	baseValue := q.unit.ToBaseValue(q.value)
+	return Quantity{value: targetUnit.FromBaseValue(baseValue), unit: targetUnit}, nil
 }
 
 // Predefined units
@@ -315,7 +420,7 @@ var (
 	Inch = NewUnit("inch", "in", Dimension{Length: 1}, 0.0254, 0.0)
 	Foot = NewUnit("foot", "ft", Dimension{Length: 1}, 0.3048, 0.0)
 	Yard = NewUnit("yard", "yd", Dimension{Length: 1}, 0.9144, 0.0)
-	Mile = NewUnit("mile", "mi", Dimension{Length: 1}, 1609.34, 0.0)
+	Mile = NewUnit("mile", "mi", Dimension{Length: 1}, 1609.344, 0.0)
 
 	// Mass
 	Kilogram  = NewUnit("kilogram", "kg", Dimension{Mass: 1}, 1.0, 0.0)
@@ -360,9 +465,65 @@ var (
 	Kilopascal = NewUnit("kilopascal", "kPa", Dimension{Length: -1, Mass: 1, Time: -2}, 1000.0, 0.0)
 
 	// Velocity (m/s)
-	MeterPerSecond    = NewUnit("meter per second", "m/s", Dimension{Length: 1, Time: -1}, 1.0, 0.0)
-	KilometerPerHour  = NewUnit("kilometer per hour", "km/h", Dimension{Length: 1, Time: -1}, 1000.0/3600.0, 0.0)
+	MeterPerSecond   = NewUnit("meter per second", "m/s", Dimension{Length: 1, Time: -1}, 1.0, 0.0)
+	KilometerPerHour = NewUnit("kilometer per hour", "km/h", Dimension{Length: 1, Time: -1}, 1000.0/3600.0, 0.0)
 
 	// Acceleration (m/s²)
 	MeterPerSecondSquared = NewUnit("meter per second squared", "m/s²", Dimension{Length: 1, Time: -2}, 1.0, 0.0)
+
+	// Area (m²)
+	SquareMeter = NewUnit("square meter", "m²", Dimension{Length: 2}, 1.0, 0.0)
+
+	// Volume (m³)
+	CubicMeter = NewUnit("cubic meter", "m³", Dimension{Length: 3}, 1.0, 0.0)
+
+	// Frequency (1/s)
+	Hertz     = NewUnit("hertz", "Hz", Dimension{Time: -1}, 1.0, 0.0)
+	Kilohertz = NewUnit("kilohertz", "kHz", Dimension{Time: -1}, 1e3, 0.0)
+	Megahertz = NewUnit("megahertz", "MHz", Dimension{Time: -1}, 1e6, 0.0)
+
+	// Angle (dimensionless in SI)
+	Radian    = NewUnit("radian", "rad", Dimension{}, 1.0, 0.0)
+	Degree    = NewUnit("degree", "°", Dimension{}, math.Pi/180.0, 0.0)
+	Arcminute = NewUnit("arcminute", "′", Dimension{}, math.Pi/10800.0, 0.0)
+	Arcsecond = NewUnit("arcsecond", "″", Dimension{}, math.Pi/648000.0, 0.0)
+
+	// Area
+	SquareKilometer = NewUnit("square kilometer", "km²", Dimension{Length: 2}, 1e6, 0.0)
+	Hectare         = NewUnit("hectare", "ha", Dimension{Length: 2}, 1e4, 0.0)
+
+	// Volume
+	Liter      = NewUnit("liter", "L", Dimension{Length: 3}, 1e-3, 0.0)
+	Milliliter = NewUnit("milliliter", "mL", Dimension{Length: 3}, 1e-6, 0.0)
+
+	// Velocity
+	MilePerHour = NewUnit("mile per hour", "mph", Dimension{Length: 1, Time: -1}, 0.44704, 0.0)
+
+	// Amount of substance
+	Mole = NewUnit("mole", "mol", Dimension{Amount: 1}, 1.0, 0.0)
+
+	// Energy
+	Calorie     = NewUnit("calorie", "cal", Dimension{Length: 2, Mass: 1, Time: -2}, 4.184, 0.0)
+	Kilocalorie = NewUnit("kilocalorie", "kcal", Dimension{Length: 2, Mass: 1, Time: -2}, 4184.0, 0.0)
+	WattHour    = NewUnit("watt hour", "Wh", Dimension{Length: 2, Mass: 1, Time: -2}, 3600.0, 0.0)
+
+	// Electricity
+	Volt = NewUnit("volt", "V", Dimension{Length: 2, Mass: 1, Time: -3, Current: -1}, 1.0, 0.0)
+	Ohm  = NewUnit("ohm", "Ω", Dimension{Length: 2, Mass: 1, Time: -3, Current: -2}, 1.0, 0.0)
 )
+
+// canonicalUnits maps a Dimension to its canonical SI/base unit, if one is
+// known. Results of multiplication, division, and power operations whose
+// dimension has an entry here are expressed in that unit.
+var canonicalUnits map[Dimension]Unit
+
+func init() {
+	canonicalUnits = make(map[Dimension]Unit)
+	for _, u := range []Unit{
+		Dimensionless, Meter, Kilogram, Second, Kelvin, Ampere,
+		Newton, Joule, Watt, Pascal, MeterPerSecond, MeterPerSecondSquared,
+		SquareMeter, CubicMeter, Hertz, Mole, Volt, Ohm,
+	} {
+		canonicalUnits[u.Dimension] = u
+	}
+}

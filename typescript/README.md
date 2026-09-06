@@ -58,7 +58,7 @@ const total = d1.add(d2); // 8.0 m
 
 // Multiplication creates derived units
 const area = new Quantity(5, units.meter).multiply(new Quantity(3, units.meter));
-console.log(area.toString()); // "15 m·m"
+console.log(area.toString()); // "15 m²"
 
 // Division creates derived units
 const velocity = new Quantity(100, units.meter).divide(new Quantity(10, units.second));
@@ -121,6 +121,11 @@ const d2 = new Quantity(1, units.meter);
 // Automatic conversion for comparison
 console.log(d1.equals(d2)); // true
 console.log(d1.lessThan(new Quantity(2, units.meter))); // true
+
+// `equals()` is strict exact equality (after conversion to a common unit).
+// For approximate comparison within a tolerance, use `isClose(relTol, absTol)`:
+console.log(new Quantity(1, units.meter).isClose(new Quantity(1.0000001, units.meter), 1e-6)); // true
+console.log(new Quantity(0, units.meter).isClose(new Quantity(1e-12, units.meter), 1e-9, 1e-9)); // true
 ```
 
 ## Available Units
@@ -142,13 +147,25 @@ console.log(d1.lessThan(new Quantity(2, units.meter))); // true
 ### Current
 - `ampere`, `milliampere`
 
+### Amount of Substance
+- `mole`
+
+### Angle
+- `radian`, `degree`, `arcminute`, `arcsecond`
+
+### Area and Volume
+- `squareMeter`, `squareKilometer`, `hectare` (area)
+- `cubicMeter`, `liter`, `milliliter` (volume)
+
 ### Derived Units
 - `newton` (force)
-- `joule`, `kilojoule` (energy)
+- `joule`, `kilojoule`, `calorie`, `kilocalorie`, `wattHour` (energy)
 - `watt`, `kilowatt` (power)
 - `pascal`, `kilopascal` (pressure)
-- `meterPerSecond`, `kilometerPerHour` (velocity)
+- `meterPerSecond`, `kilometerPerHour`, `milePerHour` (velocity)
 - `meterPerSecondSquared` (acceleration)
+- `hertz`, `kilohertz`, `megahertz` (frequency)
+- `volt`, `ohm` (electricity)
 
 ## Error Handling
 
@@ -233,7 +250,8 @@ new Quantity(value: number, unit: Unit)
 - `abs(): Quantity`
 
 **Comparison Methods:**
-- `equals(other: Quantity, tolerance?: number): boolean`
+- `equals(other: Quantity): boolean` (strict exact equality after conversion to a common unit)
+- `isClose(other: Quantity, relTol?: number, absTol?: number): boolean` (approximate comparison)
 - `lessThan(other: Quantity): boolean`
 - `lessThanOrEqual(other: Quantity): boolean`
 - `greaterThan(other: Quantity): boolean`
@@ -267,6 +285,14 @@ Contributions are welcome! Please ensure:
 - Documentation is updated
 
 ## Changelog
+
+### 2.0.0 (2026-08-29)
+- Expanded unit catalog: angles, frequencies, area, volume, velocity, chemistry, energy, and electricity
+- Added `radian`, `degree`, `arcminute`, `arcsecond`
+- Added `hertz`, `kilohertz`, `megahertz`
+- Added `squareKilometer`, `hectare`, `liter`, `milliliter`, `milePerHour`, `mole`
+- Added `calorie`, `kilocalorie`, `wattHour`, `volt`, `ohm`
+- Updated canonical unit map and tests
 
 ### 1.0.0 (2026-08-28)
 - Initial release

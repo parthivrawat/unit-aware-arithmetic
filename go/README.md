@@ -16,7 +16,7 @@ A type-safe dimensional arithmetic library that tracks units at runtime and prev
 ## Installation
 
 ```bash
-go get github.com/parthivrawat/unit-aware-arithmetic/go
+go get github.com/parthivrawat/unit-aware-arithmetic/go/v2
 ```
 
 ## Quick Start
@@ -26,7 +26,7 @@ package main
 
 import (
 	"fmt"
-	dim "github.com/parthivrawat/unit-aware-arithmetic/go"
+	dim "github.com/parthivrawat/unit-aware-arithmetic/go/v2"
 )
 
 func main() {
@@ -35,7 +35,10 @@ func main() {
 	time := dim.NewQuantity(9.58, dim.Second)
 
 	// Arithmetic operations with automatic unit tracking
-	speed := distance.Divide(time)
+	speed, err := distance.Divide(time)
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(speed) // 10.438413361169102 m/s
 
 	// Unit conversion
@@ -43,7 +46,7 @@ func main() {
 	fmt.Println(distanceKm) // 0.1 km
 
 	// Type-safe operations - this will return an error!
-	_, err := distance.Add(time)
+	_, err = distance.Add(time)
 	if err != nil {
 		fmt.Println(err) // Cannot add m and s: incompatible dimensions
 	}
@@ -55,7 +58,7 @@ func main() {
 ### Basic Arithmetic
 
 ```go
-import dim "github.com/parthivrawat/unit-aware-arithmetic/go"
+import dim "github.com/parthivrawat/unit-aware-arithmetic/go/v2"
 
 // Addition (same dimension required)
 d1 := dim.NewQuantity(5, dim.Meter)
@@ -63,18 +66,22 @@ d2 := dim.NewQuantity(3, dim.Meter)
 total, _ := d1.Add(d2) // 8.0 m
 
 // Multiplication creates derived units
-area := dim.NewQuantity(5, dim.Meter).Multiply(dim.NewQuantity(3, dim.Meter))
-fmt.Println(area) // 15 m·m
+area, _ := dim.NewQuantity(5, dim.Meter).Multiply(dim.NewQuantity(3, dim.Meter))
+fmt.Println(area) // 15 m²
+
+// Scalar multiplication keeps the unit
+double := dim.NewQuantity(5, dim.Meter).MultiplyScalar(2.0)
+fmt.Println(double) // 10 m
 
 // Division creates derived units
-velocity := dim.NewQuantity(100, dim.Meter).Divide(dim.NewQuantity(10, dim.Second))
+velocity, _ := dim.NewQuantity(100, dim.Meter).Divide(dim.NewQuantity(10, dim.Second))
 fmt.Println(velocity) // 10 m/s
 ```
 
 ### Unit Conversion
 
 ```go
-import dim "github.com/parthivrawat/unit-aware-arithmetic/go"
+import dim "github.com/parthivrawat/unit-aware-arithmetic/go/v2"
 
 // Length conversion
 distance := dim.NewQuantity(1, dim.Mile)
@@ -95,31 +102,33 @@ fmt.Println(massKg) // 4.53592 kg
 ### Physics Calculations
 
 ```go
-import dim "github.com/parthivrawat/unit-aware-arithmetic/go"
+import dim "github.com/parthivrawat/unit-aware-arithmetic/go/v2"
 
 // Calculate velocity
 distance := dim.NewQuantity(100, dim.Meter)
 time := dim.NewQuantity(9.58, dim.Second)
-velocity := distance.Divide(time)
+velocity, _ := distance.Divide(time)
 fmt.Printf("Velocity: %v\n", velocity)
 
 // Calculate force (F = ma)
 mass := dim.NewQuantity(10, dim.Kilogram)
 acceleration := dim.NewQuantity(9.8, dim.MeterPerSecondSquared)
-force := mass.Multiply(acceleration)
+force, _ := mass.Multiply(acceleration)
 fmt.Printf("Force: %v\n", force)
 
 // Calculate kinetic energy (KE = 1/2 * m * v²)
 mass2 := dim.NewQuantity(2, dim.Kilogram)
 velocity2 := dim.NewQuantity(10, dim.MeterPerSecond)
-ke := mass2.Multiply(velocity2.Power(2)).Multiply(0.5)
+velocity2Squared, _ := velocity2.Power(2)
+ke, _ := mass2.Multiply(velocity2Squared)
+ke = ke.MultiplyScalar(0.5)
 fmt.Printf("Kinetic Energy: %v\n", ke)
 ```
 
 ### Comparison Operations
 
 ```go
-import dim "github.com/parthivrawat/unit-aware-arithmetic/go"
+import dim "github.com/parthivrawat/unit-aware-arithmetic/go/v2"
 
 d1 := dim.NewQuantity(100, dim.Centimeter)
 d2 := dim.NewQuantity(1, dim.Meter)
@@ -149,20 +158,30 @@ fmt.Println(isLess) // true
 ### Current
 - `Ampere`, `Milliampere`
 
+### Amount of Substance
+- `Mole`
+
+### Angle (dimensionless)
+- `Radian`, `Degree`, `Arcminute`, `Arcsecond`
+
 ### Derived Units
 - `Newton` (force)
-- `Joule`, `Kilojoule` (energy)
+- `Joule`, `Kilojoule`, `Calorie`, `Kilocalorie`, `WattHour` (energy)
 - `Watt`, `Kilowatt` (power)
 - `Pascal`, `Kilopascal` (pressure)
-- `MeterPerSecond`, `KilometerPerHour` (velocity)
+- `MeterPerSecond`, `KilometerPerHour`, `MilePerHour` (velocity)
 - `MeterPerSecondSquared` (acceleration)
+- `SquareMeter`, `SquareKilometer`, `Hectare` (area)
+- `CubicMeter`, `Liter`, `Milliliter` (volume)
+- `Hertz`, `Kilohertz`, `Megahertz` (frequency)
+- `Volt`, `Ohm` (electricity)
 
 ## Error Handling
 
 The library provides clear error messages for invalid operations:
 
 ```go
-import dim "github.com/parthivrawat/unit-aware-arithmetic/go"
+import dim "github.com/parthivrawat/unit-aware-arithmetic/go/v2"
 
 distance := dim.NewQuantity(100, dim.Meter)
 time := dim.NewQuantity(10, dim.Second)
@@ -172,6 +191,25 @@ result, err := distance.Add(time)
 if err != nil {
 	fmt.Println(err) // "Cannot add m and s: incompatible dimensions"
 }
+```
+
+### Affine (Temperature) Units
+
+Multiplication, division, and exponentiation are undefined for affine units —
+units with a non-zero offset such as `Celsius` and `Fahrenheit`. `Multiply`,
+`Divide`, and `Power` return an `*AffineUnitArithmeticError` when any
+involved `Quantity` has `Unit.Offset != 0`. Scalar operations
+(`MultiplyScalar`, `DivideScalar`) are unaffected.
+
+```go
+import dim "github.com/parthivrawat/unit-aware-arithmetic/go/v2"
+
+// Returns an error: Cannot multiply affine units °C and °C; ...
+_, err := dim.NewQuantity(2, dim.Celsius).Multiply(dim.NewQuantity(3, dim.Celsius))
+
+// Convert to an absolute (zero-offset) unit first, e.g., Kelvin
+k, _ := dim.NewQuantity(2, dim.Celsius).To(dim.Kelvin)
+_, _ = k.Multiply(k) // OK
 ```
 
 ## Testing
@@ -214,26 +252,38 @@ NewUnit(name, symbol string, dimension Dimension, toBase, offset float64) Unit
 
 ### `Quantity`
 
-A numeric value with an associated unit.
+A numeric value with an associated unit. `Quantity` is immutable by value; its
+fields are unexported and accessed through `Value()` and `Unit()`.
 
 **Constructor:**
 ```go
 NewQuantity(value float64, unit Unit) Quantity
 ```
 
+**Accessors:**
+- `Value() float64`
+- `Unit() Unit`
+
 **Arithmetic Methods:**
 - `Add(other Quantity) (Quantity, error)`
 - `Subtract(other Quantity) (Quantity, error)`
-- `Multiply(other interface{}) Quantity` (accepts Quantity, float64, or int)
-- `Divide(other interface{}) Quantity` (accepts Quantity, float64, or int)
-- `Power(exponent int) Quantity`
+- `Multiply(other Quantity) (Quantity, error)`
+- `MultiplyScalar(f float64) Quantity`
+- `Divide(other Quantity) (Quantity, error)`
+- `DivideScalar(f float64) Quantity`
+- `Power(exponent int) (Quantity, error)`
 - `Negate() Quantity`
 - `Abs() Quantity`
 
 **Comparison Methods:**
-- `Equals(other Quantity, tolerance float64) bool`
+- `Equals(other Quantity, tolerance float64) bool` — `true` if the values are equal within an absolute `tolerance`.
+- `IsClose(other Quantity, relTol, absTol float64) (bool, error)` — `true` if the values are close within a relative `relTol` or an absolute `absTol` (or both).
 - `LessThan(other Quantity) (bool, error)`
 - `GreaterThan(other Quantity) (bool, error)`
+- `LessThanOrEqual(other Quantity, tolerance float64) (bool, error)`
+- `GreaterThanOrEqual(other Quantity, tolerance float64) (bool, error)`
+
+`==` is strict struct equality; use `Equals` or `IsClose` for approximate comparisons.
 
 **Conversion:**
 - `To(targetUnit Unit) (Quantity, error)`
@@ -263,6 +313,19 @@ Contributions are welcome! Please ensure:
 - Examples are provided
 
 ## Changelog
+
+### 2.0.0
+- Expanded unit catalog:
+  - Angle (dimensionless): `Radian`, `Degree`, `Arcminute`, `Arcsecond`
+  - Frequency: `Kilohertz`, `Megahertz` (joins existing `Hertz`)
+  - Area: `SquareKilometer`, `Hectare` (joins existing `SquareMeter`)
+  - Volume: `Liter`, `Milliliter` (joins existing `CubicMeter`)
+  - Velocity: `MilePerHour`
+  - Amount of substance: `Mole`
+  - Energy: `Calorie`, `Kilocalorie`, `WattHour`
+  - Electricity: `Volt`, `Ohm`
+- Extended canonical-unit resolution: `Mole`, `Volt`, and `Ohm` are now
+  preferred result units for their dimensions (e.g., W/A → V, V/A → Ω)
 
 ### 1.0.0 (2026-08-28)
 - Initial release
