@@ -37,11 +37,14 @@ fn main() {
     println!("{}", speed); // 10.438413361169102 m/s
 
     // Unit conversion
-    let distance_km = distance.to(units::KILOMETER).unwrap();
+    let other_distance = Quantity::new(100.0, units::METER);
+    let distance_km = other_distance.to(units::KILOMETER).unwrap();
     println!("{}", distance_km); // 0.1 km
 
-    // Type-safe operations - this will return an error!
-    match distance + time {
+    // Type-safe checked operations - this will return an error!
+    let d = Quantity::new(100.0, units::METER);
+    let t = Quantity::new(10.0, units::SECOND);
+    match d.try_add(&t) {
         Ok(_) => println!("This won't happen"),
         Err(e) => println!("Error: {}", e), // Cannot add m and s: incompatible dimensions
     }
@@ -58,7 +61,7 @@ use unit_aware_arithmetic::{Quantity, units};
 // Addition (same dimension required)
 let d1 = Quantity::new(5.0, units::METER);
 let d2 = Quantity::new(3.0, units::METER);
-let total = (d1 + d2).unwrap(); // 8.0 m
+let total = d1 + d2; // 8.0 m (panics if dimensions are incompatible)
 
 // Multiplication creates derived units
 let area = Quantity::new(5.0, units::METER) * Quantity::new(3.0, units::METER);
@@ -122,7 +125,11 @@ use unit_aware_arithmetic::{Quantity, units};
 let d1 = Quantity::new(100.0, units::CENTIMETER);
 let d2 = Quantity::new(1.0, units::METER);
 
-// Automatic conversion for comparison
+// Automatic conversion for comparison (PartialEq / PartialOrd)
+println!("{}", d1 == d2); // true
+println!("{}", d1 < Quantity::new(2.0, units::METER)); // true
+
+// Tolerance-based comparison
 println!("{}", d1.approx_eq(&d2, 1e-9)); // true
 ```
 
@@ -145,13 +152,41 @@ println!("{}", d1.approx_eq(&d2, 1e-9)); // true
 ### Current
 - `AMPERE`, `MILLIAMPERE`
 
-### Derived Units
-- `NEWTON` (force)
-- `JOULE` (energy)
-- `WATT` (power)
-- `PASCAL` (pressure)
-- `METER_PER_SECOND` (velocity)
-- `METER_PER_SECOND_SQUARED` (acceleration)
+### Amount of Substance
+- `MOLE`
+
+### Angle (dimensionless)
+- `RADIAN`, `DEGREE`, `ARCMINUTE`, `ARCSECOND`
+
+### Frequency
+- `HERTZ`, `KILOHERTZ`, `MEGAHERTZ`
+
+### Area
+- `SQUARE_METER`, `SQUARE_KILOMETER`, `HECTARE`
+
+### Volume
+- `CUBIC_METER`, `LITER`, `MILLILITER`
+
+### Velocity
+- `METER_PER_SECOND`, `KILOMETER_PER_HOUR`, `MILE_PER_HOUR`
+
+### Energy
+- `JOULE`, `KILOJOULE`, `CALORIE`, `KILOCALORIE`, `WATT_HOUR`
+
+### Power
+- `WATT`, `KILOWATT`
+
+### Pressure
+- `PASCAL`, `KILOPASCAL`
+
+### Force
+- `NEWTON`
+
+### Acceleration
+- `METER_PER_SECOND_SQUARED`
+
+### Electricity
+- `VOLT`, `OHM`
 
 ## Error Handling
 
@@ -164,10 +199,13 @@ let distance = Quantity::new(100.0, units::METER);
 let time = Quantity::new(10.0, units::SECOND);
 
 // This will return an error
-match distance + time {
+match distance.try_add(&time) {
     Ok(_) => println!("Won't happen"),
     Err(e) => println!("{}", e), // "Cannot add m and s: incompatible dimensions"
 }
+
+// The `+` operator panics on incompatible dimensions:
+// let _ = distance + time; // panics: "Cannot add m and s: incompatible dimensions"
 ```
 
 ## Testing
@@ -207,7 +245,7 @@ Unit::new(name: &'static str, symbol: &'static str, dimension: Dimension, to_bas
 
 ### `Quantity`
 
-A numeric value with an associated unit.
+A numeric value with an associated unit. `Quantity` is `Clone` but not `Copy` — the binary operators (`+`, `-`, `*`, `/`) consume their operands, so clone or create a new `Quantity` if you need to reuse a value.
 
 **Constructor:**
 ```rust
@@ -215,19 +253,24 @@ Quantity::new(value: f64, unit: Unit) -> Quantity
 ```
 
 **Methods:**
-- `to(target_unit: Unit) -> Result<Quantity, IncompatibleUnitsError>`
-- `pow(exponent: i32) -> Quantity`
-- `abs() -> Quantity`
-- `approx_eq(&self, other: &Quantity, tolerance: f64) -> bool`
+- `to(&self, target_unit: Unit) -> Result<Quantity, IncompatibleUnitsError>`
+- `try_add(&self, other: &Quantity) -> Result<Quantity, IncompatibleUnitsError>`
+- `try_sub(&self, other: &Quantity) -> Result<Quantity, IncompatibleUnitsError>`
+- `pow(&self, exponent: i32) -> Quantity`
+- `abs(&self) -> Quantity`
+- `is_close(&self, other: &Quantity, rel_tol: f64, abs_tol: f64) -> bool`
+- `approx_eq(&self, other: &Quantity, tolerance: f64) -> bool` — equivalent to `is_close(..., 0.0, tolerance)`
 
 **Trait Implementations:**
-- `Add<Quantity>` → `Result<Quantity, IncompatibleUnitsError>`
-- `Sub<Quantity>` → `Result<Quantity, IncompatibleUnitsError>`
+- `Add<Quantity>` → `Quantity` — **panics** on incompatible dimensions; use `try_add` for checked arithmetic
+- `Sub<Quantity>` → `Quantity` — **panics** on incompatible dimensions; use `try_sub` for checked arithmetic
 - `Mul<Quantity>` → `Quantity`
 - `Mul<f64>` → `Quantity`
 - `Div<Quantity>` → `Quantity`
 - `Div<f64>` → `Quantity`
 - `Neg` → `Quantity`
+- `PartialEq` — strict equality after automatic unit conversion; use `is_close` or `approx_eq` for approximate comparison
+- `PartialOrd` — dimension check with automatic unit conversion
 - `Display`
 
 ## Design Principles
@@ -260,6 +303,24 @@ Contributions are welcome! Please ensure:
 - Documentation is updated
 
 ## Changelog
+
+### 2.0.0 (2026-09-07)
+- Added angle units: `RADIAN`, `DEGREE`, `ARCMINUTE`, `ARCSECOND` (dimensionless)
+- Added frequency units: `KILOHERTZ`, `MEGAHERTZ` alongside `HERTZ`
+- Added area units: `SQUARE_KILOMETER`, `HECTARE`
+- Added volume units: `LITER`, `MILLILITER`
+- Added velocity unit: `MILE_PER_HOUR`
+- Added chemistry unit: `MOLE`
+- Added energy units: `CALORIE`, `KILOCALORIE`, `WATT_HOUR`
+- Added electricity units: `VOLT`, `OHM`
+- Extended canonical unit registry to support `Hz`, `m²`, `m³`, `V`, `Ω`, and other new SI-derived symbols
+- Added unit tests covering construction, conversions, derived canonical results, and electricity dimension checks
+
+### 1.0.1 (2026-09-06)
+- Added `KILOJOULE`, `KILOWATT`, `KILOPASCAL`, and `KILOMETER_PER_HOUR` units
+- `Add` and `Sub` now return `Quantity` and panic on incompatible dimensions; added `try_add` and `try_sub` for checked arithmetic
+- Implemented `PartialEq` and `PartialOrd` with automatic unit conversion
+- `Quantity` is now `Clone` but not `Copy` (operators consume operands)
 
 ### 1.0.0 (2026-08-28)
 - Initial release
