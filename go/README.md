@@ -46,7 +46,7 @@ func main() {
 	fmt.Println(distanceKm) // 0.1 km
 
 	// Type-safe operations - this will return an error!
-	_, err := distance.Add(time)
+	_, err = distance.Add(time)
 	if err != nil {
 		fmt.Println(err) // Cannot add m and s: incompatible dimensions
 	}
@@ -67,7 +67,7 @@ total, _ := d1.Add(d2) // 8.0 m
 
 // Multiplication creates derived units
 area, _ := dim.NewQuantity(5, dim.Meter).Multiply(dim.NewQuantity(3, dim.Meter))
-fmt.Println(area) // 15 m·m
+fmt.Println(area) // 15 m²
 
 // Scalar multiplication keeps the unit
 double := dim.NewQuantity(5, dim.Meter).MultiplyScalar(2.0)

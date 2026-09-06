@@ -58,7 +58,7 @@ const total = d1.add(d2); // 8.0 m
 
 // Multiplication creates derived units
 const area = new Quantity(5, units.meter).multiply(new Quantity(3, units.meter));
-console.log(area.toString()); // "15 m·m"
+console.log(area.toString()); // "15 m²"
 
 // Division creates derived units
 const velocity = new Quantity(100, units.meter).divide(new Quantity(10, units.second));

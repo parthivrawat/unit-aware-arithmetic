@@ -56,11 +56,11 @@ fn bench_addition() {
     let raw = (start.elapsed().as_nanos() as f64) / iters as f64;
 
     let q1 = black_box(Quantity::new(100.0, units::METER));
-    let q2 = black_box(Quantity::new(0.5, units::METER));
+    let q2 = black_box(Quantity::new(50.0, units::CENTIMETER));
     let start = Instant::now();
     let mut q = q1.clone();
     for _ in 0..iters {
-        q = q1.clone() + q2.clone();
+        q = black_box(q1.clone()) + black_box(q2.clone());
     }
     let _ = black_box(q);
     let qty = (start.elapsed().as_nanos() as f64) / iters as f64;
@@ -86,7 +86,7 @@ fn bench_multiplication() {
     let start = Instant::now();
     let mut q = q1.clone();
     for _ in 0..iters {
-        q = q1.clone() * q2.clone();
+        q = black_box(q1.clone()) * black_box(q2.clone());
     }
     let _ = black_box(q);
     let qty = (start.elapsed().as_nanos() as f64) / iters as f64;
@@ -112,7 +112,7 @@ fn bench_division() {
     let start = Instant::now();
     let mut q = q1.clone();
     for _ in 0..iters {
-        q = q1.clone() / q2.clone();
+        q = black_box(q1.clone()) / black_box(q2.clone());
     }
     let _ = black_box(q);
     let qty = (start.elapsed().as_nanos() as f64) / iters as f64;
@@ -136,7 +136,7 @@ fn bench_conversion() {
     let start = Instant::now();
     let mut q = q1.clone();
     for _ in 0..iters {
-        q = q1.to(units::KILOMETER).unwrap();
+        q = black_box(q1.clone()).to(units::KILOMETER).unwrap();
     }
     let _ = black_box(q);
     let qty = (start.elapsed().as_nanos() as f64) / iters as f64;

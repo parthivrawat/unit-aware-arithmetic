@@ -449,7 +449,7 @@ class units:
     inch = Unit("inch", "in", Dimension(length=1), to_base=0.0254)
     foot = Unit("foot", "ft", Dimension(length=1), to_base=0.3048)
     yard = Unit("yard", "yd", Dimension(length=1), to_base=0.9144)
-    mile = Unit("mile", "mi", Dimension(length=1), to_base=1609.34)
+    mile = Unit("mile", "mi", Dimension(length=1), to_base=1609.344)
 
     # Mass
     kilogram = Unit("kilogram", "kg", Dimension(mass=1))

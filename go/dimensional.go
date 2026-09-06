@@ -320,6 +320,10 @@ func (q Quantity) IsClose(other Quantity, relTol, absTol float64) (bool, error) 
 		return false, err
 	}
 
+	if q.value == otherInSelfUnit.value {
+		return true, nil
+	}
+
 	diff := math.Abs(q.value - otherInSelfUnit.value)
 	max := math.Max(math.Abs(q.value), math.Abs(otherInSelfUnit.value))
 	return diff <= absTol || diff <= relTol*max, nil
@@ -411,7 +415,7 @@ var (
 	Inch = NewUnit("inch", "in", Dimension{Length: 1}, 0.0254, 0.0)
 	Foot = NewUnit("foot", "ft", Dimension{Length: 1}, 0.3048, 0.0)
 	Yard = NewUnit("yard", "yd", Dimension{Length: 1}, 0.9144, 0.0)
-	Mile = NewUnit("mile", "mi", Dimension{Length: 1}, 1609.34, 0.0)
+	Mile = NewUnit("mile", "mi", Dimension{Length: 1}, 1609.344, 0.0)
 
 	// Mass
 	Kilogram  = NewUnit("kilogram", "kg", Dimension{Mass: 1}, 1.0, 0.0)

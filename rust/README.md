@@ -65,7 +65,7 @@ let total = d1 + d2; // 8.0 m (panics if dimensions are incompatible)
 
 // Multiplication creates derived units
 let area = Quantity::new(5.0, units::METER) * Quantity::new(3.0, units::METER);
-println!("{}", area); // 15 m·m
+println!("{}", area); // 15 m²
 
 // Division creates derived units
 let velocity = Quantity::new(100.0, units::METER) / Quantity::new(10.0, units::SECOND);
@@ -256,7 +256,7 @@ Quantity::new(value: f64, unit: Unit) -> Quantity
 - `to(&self, target_unit: Unit) -> Result<Quantity, IncompatibleUnitsError>`
 - `try_add(&self, other: &Quantity) -> Result<Quantity, IncompatibleUnitsError>`
 - `try_sub(&self, other: &Quantity) -> Result<Quantity, IncompatibleUnitsError>`
-- `pow(&self, exponent: i32) -> Quantity`
+- `pow(&self, exponent: i32) -> Quantity` — **panics** if the quantity uses an affine unit (e.g. Celsius, Fahrenheit)
 - `abs(&self) -> Quantity`
 - `is_close(&self, other: &Quantity, rel_tol: f64, abs_tol: f64) -> bool`
 - `approx_eq(&self, other: &Quantity, tolerance: f64) -> bool` — equivalent to `is_close(..., 0.0, tolerance)`
@@ -264,9 +264,9 @@ Quantity::new(value: f64, unit: Unit) -> Quantity
 **Trait Implementations:**
 - `Add<Quantity>` → `Quantity` — **panics** on incompatible dimensions; use `try_add` for checked arithmetic
 - `Sub<Quantity>` → `Quantity` — **panics** on incompatible dimensions; use `try_sub` for checked arithmetic
-- `Mul<Quantity>` → `Quantity`
+- `Mul<Quantity>` → `Quantity` — **panics** on incompatible dimensions or if either operand uses an affine unit
 - `Mul<f64>` → `Quantity`
-- `Div<Quantity>` → `Quantity`
+- `Div<Quantity>` → `Quantity` — **panics** on incompatible dimensions or if either operand uses an affine unit
 - `Div<f64>` → `Quantity`
 - `Neg` → `Quantity`
 - `PartialEq` — strict equality after automatic unit conversion; use `is_close` or `approx_eq` for approximate comparison

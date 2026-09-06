@@ -342,6 +342,9 @@ impl Quantity {
         }
         match other.to(self.unit.clone()) {
             Ok(converted) => {
+                if self.value == converted.value {
+                    return true;
+                }
                 let diff = (self.value - converted.value).abs();
                 let max = self.value.abs().max(converted.value.abs());
                 diff <= abs_tol || diff <= rel_tol * max
@@ -596,7 +599,7 @@ pub mod units {
         "mile",
         "mi",
         Dimension::new(1, 0, 0, 0, 0, 0, 0),
-        1609.34,
+        1609.344,
         0.0,
     );
 

@@ -231,7 +231,7 @@ A numeric value with an associated unit. Supports:
 - Arithmetic: `+`, `-`, `*`, `/`, `**`, `-` (negation), `abs()`
 - Comparison: `==`, `!=`, `<`, `<=`, `>`, `>=` (`==` is strict exact equality after conversion to a common unit)
 - Approximate comparison: `.is_close(other, rel_tol=1e-9, abs_tol=0.0)`
-- Conversion: `.to(target_unit)`
+- Conversion: `.to(target_unit)` (returns `Quantity`); `.value_in(target_unit)` (returns the raw `float` value)
 
 ### `units`
 
@@ -251,7 +251,7 @@ Contributions are welcome! Please ensure:
 
 ## Changelog
 
-### 2.0.0 (Unreleased)
+### 2.0.0 (2026-09-06)
 - Added angle units: `radian`, `degree`, `arcminute`, `arcsecond`
 - Added frequency units: `kilohertz`, `megahertz`
 - Added area units: `square_kilometer`, `hectare`

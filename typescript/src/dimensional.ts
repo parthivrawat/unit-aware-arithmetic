@@ -384,6 +384,9 @@ export class Quantity {
     }
 
     const otherInSelfUnit = other.to(this.unit);
+    if (this.value === otherInSelfUnit.value) {
+      return true;
+    }
     const diff = Math.abs(this.value - otherInSelfUnit.value);
     return (
       diff <= absTol ||
@@ -495,7 +498,7 @@ export const units = {
   inch: new Unit('inch', 'in', new Dimension(1), 0.0254),
   foot: new Unit('foot', 'ft', new Dimension(1), 0.3048),
   yard: new Unit('yard', 'yd', new Dimension(1), 0.9144),
-  mile: new Unit('mile', 'mi', new Dimension(1), 1609.34),
+  mile: new Unit('mile', 'mi', new Dimension(1), 1609.344),
 
   // Mass
   kilogram: new Unit('kilogram', 'kg', new Dimension(0, 1)),

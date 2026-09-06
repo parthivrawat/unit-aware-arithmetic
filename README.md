@@ -198,10 +198,10 @@ temp_c = temp_f.to(units.celsius)  # 22.22 °C
 
 | Language   | Status | Tests | Coverage | Notes |
 |------------|--------|-------|----------|-------|
-| Python     | ✅ Production-ready | 86 tests | >95% | Stable and fully tested |
-| TypeScript | ✅ Production-ready | 86 tests | >95% | Stable and fully tested |
+| Python     | ✅ Production-ready | 104 tests | >95% | Stable and fully tested |
+| TypeScript | ✅ Production-ready | 100 tests | >95% | Stable and fully tested |
 | Go         | ✅ Production-ready | 80 tests | >95% | Typed APIs, error returns, immutable `Quantity` |
-| Rust       | ✅ Production-ready | 52 tests + 1 doc-test | >95% | No leaks, `PartialEq`/`PartialOrd`, clippy-clean |
+| Rust       | ✅ Production-ready | 65 tests + 1 doc-test | >95% | No leaks, `PartialEq`/`PartialOrd`, clippy-clean |
 
 ## Design Principles
 
