@@ -387,6 +387,9 @@ export class Quantity {
     if (this.value === otherInSelfUnit.value) {
       return true;
     }
+    if (!Number.isFinite(this.value) || !Number.isFinite(otherInSelfUnit.value)) {
+      return false;
+    }
     const diff = Math.abs(this.value - otherInSelfUnit.value);
     return (
       diff <= absTol ||

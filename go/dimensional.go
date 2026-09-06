@@ -324,6 +324,11 @@ func (q Quantity) IsClose(other Quantity, relTol, absTol float64) (bool, error) 
 		return true, nil
 	}
 
+	if math.IsNaN(q.value) || math.IsNaN(otherInSelfUnit.value) ||
+		math.IsInf(q.value, 0) || math.IsInf(otherInSelfUnit.value, 0) {
+		return false, nil
+	}
+
 	diff := math.Abs(q.value - otherInSelfUnit.value)
 	max := math.Max(math.Abs(q.value), math.Abs(otherInSelfUnit.value))
 	return diff <= absTol || diff <= relTol*max, nil

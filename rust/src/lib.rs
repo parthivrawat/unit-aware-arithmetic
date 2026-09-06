@@ -345,6 +345,9 @@ impl Quantity {
                 if self.value == converted.value {
                     return true;
                 }
+                if !self.value.is_finite() || !converted.value.is_finite() {
+                    return false;
+                }
                 let diff = (self.value - converted.value).abs();
                 let max = self.value.abs().max(converted.value.abs());
                 diff <= abs_tol || diff <= rel_tol * max

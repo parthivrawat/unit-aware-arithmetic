@@ -88,6 +88,19 @@ class TestUnit:
         assert units.meter.is_compatible_with(units.foot)
         assert not units.meter.is_compatible_with(units.second)
 
+    def test_unit_is_immutable(self):
+        """Unit attributes cannot be reassigned after construction."""
+        u = Unit("test", "t", Dimension(length=1), to_base=1.0)
+        for attr, value in [
+            ("name", "x"),
+            ("symbol", "x"),
+            ("dimension", Dimension()),
+            ("to_base", 2.0),
+            ("offset", 1.0),
+        ]:
+            with pytest.raises(AttributeError):
+                setattr(u, attr, value)
+
 
 class TestQuantityBasics:
     """Test basic Quantity operations."""
@@ -304,6 +317,19 @@ class TestComparison:
         q2 = Quantity(3, units.second)
         with pytest.raises(IncompatibleUnitsError):
             q1 < q2
+
+    def test_nan_comparisons_always_false(self):
+        """NaN must not satisfy any ordering comparison, including self-comparison."""
+        nan = Quantity(float("nan"), units.meter)
+        q = Quantity(5, units.meter)
+        assert not (nan > q)
+        assert not (nan >= q)
+        assert not (q > nan)
+        assert not (q >= nan)
+        assert not (nan > nan)
+        assert not (nan >= nan)
+        assert not (nan < q)
+        assert not (nan <= nan)
 
 
 class TestIsClose:

@@ -92,6 +92,17 @@ class Unit:
         self.dimension = dimension
         self.to_base = to_base  # Conversion factor to base unit
         self.offset = offset  # Offset for affine conversions (e.g., Celsius)
+        self._initialized = True
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Prevent attribute reassignment after construction. Units are used
+        as hash keys (e.g. inside ``Quantity.__hash__`` via the dimension and
+        conversion factors), so they must be immutable."""
+        if getattr(self, "_initialized", False):
+            raise AttributeError(
+                f"Unit is immutable; cannot reassign attribute '{name}'"
+            )
+        super().__setattr__(name, value)
 
     def convert_to_base(self, value: float) -> float:
         """Convert ``value`` expressed in this unit to the base unit,
@@ -394,10 +405,19 @@ class Quantity:
         return self == other or self < other
 
     def __gt__(self, other: Quantity) -> bool:
-        return not self <= other
+        if not isinstance(other, Quantity):
+            raise TypeError(f"Cannot compare Quantity and {type(other).__name__}")
+
+        self._ensure_compatible(
+            other,
+            f"Cannot compare {self.unit.symbol} and {other.unit.symbol}",
+        )
+
+        other_in_self_unit = other.to(self.unit)
+        return self.value > other_in_self_unit.value
 
     def __ge__(self, other: Quantity) -> bool:
-        return not self < other
+        return self == other or self > other
 
     # Unit conversion
 
