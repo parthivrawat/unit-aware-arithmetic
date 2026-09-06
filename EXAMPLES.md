@@ -35,7 +35,7 @@ print(f"Acceleration: {acceleration}")  # 6.0 m/s²
 mass = Quantity(1500, units.kilogram)  # Car mass
 acceleration = Quantity(2.5, units.meter_per_second_squared)
 force = mass * acceleration
-print(f"Force required: {force}")  # 3750 kg·m/s²
+print(f"Force required: {force}")  # 3750 N
 ```
 
 ### Energy and Power
@@ -47,7 +47,7 @@ from dimensional import Quantity, units
 mass = Quantity(1000, units.kilogram)
 velocity = Quantity(25, units.meter_per_second)  # 90 km/h
 kinetic_energy = 0.5 * mass * (velocity ** 2)
-print(f"Kinetic energy: {kinetic_energy}")  # 312500 kg·m²/s²
+print(f"Kinetic energy: {kinetic_energy}")  # 312500 J
 
 # Power consumption
 energy = Quantity(3600, units.joule)
@@ -55,9 +55,9 @@ time = Quantity(1, units.hour)
 power = energy / time
 print(f"Power: {power}")  # 1.0 W
 
-# Convert to kilowatt-hours
-energy_kwh = energy.to(units.kilojoule)
-print(f"Energy: {energy_kwh}")  # 3.6 kJ
+# Convert to kilojoules
+energy_kj = energy.to(units.kilojoule)
+print(f"Energy: {energy_kj}")  # 3.6 kJ
 ```
 
 ### Gravitational Calculations
@@ -75,7 +75,7 @@ print(f"Distance fallen: {distance}")  # 44.1 m
 mass = Quantity(50, units.kilogram)
 height = Quantity(10, units.meter)
 potential_energy = mass * g * height
-print(f"Potential energy: {potential_energy}")  # 4900 kg·m²/s²
+print(f"Potential energy: {potential_energy}")  # 4900 J
 ```
 
 ---
@@ -87,13 +87,14 @@ print(f"Potential energy: {potential_energy}")  # 4900 kg·m²/s²
 ```python
 from dimensional import Quantity, units
 
+# Power (P = F·v)
+force = Quantity(100, units.newton)
+velocity = Quantity(10, units.meter_per_second)
+power = force * velocity
+print(f"Power: {power}")  # 1000 W
+
 # Ohm's Law (V = IR) - future feature
 # voltage = current * resistance
-
-# Power (P = VI)
-voltage = Quantity(220, units.volt)  # Future: add volt unit
-current = Quantity(5, units.ampere)
-# power = voltage * current
 ```
 
 ### Mechanical Engineering
@@ -111,7 +112,7 @@ print(f"Pressure: {pressure}")  # 4000 Pa
 force = Quantity(100, units.newton)
 radius = Quantity(0.5, units.meter)
 torque = force * radius
-print(f"Torque: {torque}")  # 50 N·m
+print(f"Torque: {torque}")  # 50 J (dimensionally equivalent to N·m)
 ```
 
 ### Fluid Dynamics
@@ -138,15 +139,12 @@ print(f"Flow rate: {flow_rate}")  # 0.0002 m³/s
 ```python
 from dimensional import Quantity, units
 
-# Concentration (mol/L) - future feature
-# moles = Quantity(0.5, units.mole)
-# volume = Quantity(1, units.liter)
-# concentration = moles / volume
-
 # Temperature conversion
 temp_celsius = Quantity(25, units.celsius)
 temp_kelvin = temp_celsius.to(units.kelvin)
 print(f"Room temperature: {temp_kelvin}")  # 298.15 K
+
+# Concentration (mol/m³) - future feature
 ```
 
 ### Astronomy
@@ -154,16 +152,12 @@ print(f"Room temperature: {temp_kelvin}")  # 298.15 K
 ```python
 from dimensional import Quantity, units
 
-# Orbital velocity (v = √(GM/r))
-# For Earth's orbit around the Sun
-# G = 6.674e-11 m³/(kg·s²)
-# M_sun = 1.989e30 kg
-# r = 1.496e11 m (1 AU)
-
-# Distance to nearest star
-distance_ly = Quantity(4.24, units.year) * Quantity(299792458, units.meter_per_second)
-# Convert to meters
-# distance_m = distance_ly  # Future: add light-year unit
+# Distance a light signal travels in 4.24 days
+speed_of_light = Quantity(299792458, units.meter_per_second)
+time = Quantity(4.24, units.day)
+distance = speed_of_light * time
+distance_km = distance.to(units.kilometer)
+print(f"Distance: {distance_km}")  # ~1.10e11 km
 ```
 
 ---
@@ -192,15 +186,15 @@ print(f"Oven temperature: {oven_celsius}")  # 176.67 °C
 ```python
 from dimensional import Quantity, units
 
-# Fuel efficiency
-distance = Quantity(500, units.kilometer)
-fuel = Quantity(40, units.liter)  # Future: add liter unit
-# efficiency = distance / fuel  # km/L
+# Speed conversion (mph to km/h)
+speed = Quantity(65, units.mile) / Quantity(1, units.hour)
+speed_kmh = speed.to(units.kilometer_per_hour)
+print(f"Speed limit: {speed_kmh}")  # 104.6 km/h
 
-# Speed conversion
-speed_mph = Quantity(65, units.mile)
-speed_kmh = speed_mph.to(units.kilometer)
-print(f"Speed limit: {speed_kmh}")  # 104.6 km
+# Distance conversion
+distance_miles = Quantity(500, units.mile)
+distance_km = distance_miles.to(units.kilometer)
+print(f"Trip distance: {distance_km}")  # 804.67 km
 ```
 
 ### Fitness
@@ -214,10 +208,11 @@ time = Quantity(25, units.minute)
 pace = time / distance
 print(f"Pace: {pace}")  # 5 min/km
 
-# Calorie burn rate (future feature)
-# calories = Quantity(500, units.calorie)
-# time = Quantity(1, units.hour)
-# burn_rate = calories / time
+# Energy burn rate
+energy = Quantity(500, units.kilojoule)
+time = Quantity(1, units.hour)
+burn_rate = energy / time
+print(f"Burn rate: {burn_rate}")  # ~138.9 W
 ```
 
 ---
@@ -299,7 +294,7 @@ acceleration = velocity / time
 force = mass * acceleration
 
 print(f"Acceleration: {acceleration}")  # 2.5 m/s²
-print(f"Force: {force}")  # 25 kg·m/s²
+print(f"Force: {force}")  # 25 N
 
 # Verify dimensions
 print(f"Force dimension: L={force.unit.dimension.length}, "
@@ -329,7 +324,7 @@ def calculate_work(force: Quantity, distance: Quantity) -> Quantity:
 force = Quantity(50, units.newton)
 distance = Quantity(10, units.meter)
 work = calculate_work(force, distance)
-print(f"Work done: {work}")  # 500 N·m (Joules)
+print(f"Work done: {work}")  # 500 J
 ```
 
 ---
@@ -380,5 +375,5 @@ def calculate_pressure(force: Quantity, area: Quantity) -> Quantity:
 
 ---
 
-**Last Updated**: 2026-08-28  
+**Last Updated**: 2026-08-28
 **More Examples**: See test files for comprehensive examples

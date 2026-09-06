@@ -2,7 +2,7 @@
 
 A type-safe dimensional arithmetic library that tracks units at compile/runtime and prevents invalid operations.
 
-**Status**: ✅ Production-ready  
+**Status**: ✅ Production-ready across Python, TypeScript, Go, and Rust  
 **Languages**: Python, TypeScript, Go, Rust  
 **License**: MIT
 
@@ -110,6 +110,30 @@ cd rust
 cargo test
 ```
 
+## Package Names
+
+The packages have different distribution names versus the in-code module/crate names:
+
+- **Python**: package `unit-aware-arithmetic` on PyPI; importable module is `dimensional` (`from dimensional import Quantity, units`).
+- **TypeScript**: npm package `unit-aware-arithmetic`.
+- **Go**: module path `github.com/parthivrawat/unit-aware-arithmetic/go/v2` (v2 semantic import versioning); package name `dimensional`.
+- **Rust**: crate `unit-aware-arithmetic` on crates.io.
+
+## Cross-Language API
+
+A quick reference for the same operation in each implementation. All examples use meters/seconds where applicable.
+
+| Operation | Python | TypeScript | Go | Rust |
+|---|---|---|---|---|
+| Construction | `Quantity(value, unit)` | `quantity(value, unit)` or `new Quantity(value, unit)` | `dimensional.NewQuantity(value, unit)` | `Quantity::new(value, units::METER)` |
+| Add | `a + b` | `a.add(b)` | `a.Add(b)` returns `(Quantity, error)` | `a + b` (panics if incompatible; also `a.try_add(&b) -> Result`) |
+| Subtract | `a - b` | `a.subtract(b)` | `a.Subtract(b)` returns `(Quantity, error)` | `a - b` (panics if incompatible; also `a.try_sub(&b) -> Result`) |
+| Multiply | `a * b` / `a * scalar` | `a.multiply(b)` / `a.multiply(scalar)` | `a.Multiply(b)` returns `(Quantity, error)`; `a.MultiplyScalar(f)` | `a * b` / `a * scalar` |
+| Divide | `a / b` / `a / scalar` | `a.divide(b)` / `a.divide(scalar)` | `a.Divide(b)` returns `(Quantity, error)`; `a.DivideScalar(f)` | `a / b` / `a / scalar` |
+| Power | `a ** exponent` | `a.power(exponent)` | `a.Power(exponent)` returns `(Quantity, error)` | `a.pow(exponent)` |
+| Convert | `a.to(unit)` (Quantity); `a.value_in(unit)` (float) | `a.to(unit)` (Quantity); `a.in(unit)` (number) | `a.To(unit)` returns `(Quantity, error)` | `a.to(unit)` returns `Result<Quantity, IncompatibleUnitsError>` |
+| Equality / Compare | `a == b` (or `a.is_close(b)`) | `a.equals(b)` (or `a.isClose(b, relTol, absTol)`) | `a.Equals(b, tol)`; `a.IsClose(b, relTol, absTol)`; `a.LessThan(b)` / `a.GreaterThan(b)` / `a.LessThanOrEqual(b, tol)` / `a.GreaterThanOrEqual(b, tol)` | `a == b` / `a.partial_cmp(&b)`; `a.is_close(&b, relTol, absTol)` / `a.approx_eq(&b, tol)` |
+
 ## Real-World Examples
 
 ### Physics Calculations
@@ -155,23 +179,29 @@ temp_c = temp_f.to(units.celsius)  # 22.22 °C
 - **Time**: second, minute, hour, day
 - **Temperature**: kelvin, celsius, fahrenheit
 - **Current**: ampere, milliampere
+- **Amount of substance**: mole
+- **Angle**: radian, degree, arcminute, arcsecond
 
 ### Derived Units
 - **Force**: newton (kg·m/s²)
-- **Energy**: joule, kilojoule (kg·m²/s²)
+- **Energy**: joule, kilojoule, calorie, kilocalorie, watt_hour (kg·m²/s²)
 - **Power**: watt, kilowatt (kg·m²/s³)
 - **Pressure**: pascal, kilopascal (kg/(m·s²))
-- **Velocity**: meter_per_second, kilometer_per_hour
+- **Frequency**: hertz, kilohertz, megahertz (1/s)
+- **Area**: square_meter, square_kilometer, hectare
+- **Volume**: cubic_meter, liter, milliliter
+- **Velocity**: meter_per_second, kilometer_per_hour, mile_per_hour
 - **Acceleration**: meter_per_second_squared
+- **Electricity**: volt (kg·m²/(s³·A)), ohm (kg·m²/(s³·A²))
 
 ## Implementation Status
 
 | Language   | Status | Tests | Coverage | Notes |
 |------------|--------|-------|----------|-------|
-| Python     | ✅ Complete | 50 tests | >95% | Production-ready |
-| TypeScript | ✅ Complete | 46 tests | >95% | Production-ready |
-| Go         | ✅ Complete | 44 tests | >95% | Production-ready |
-| Rust       | ✅ Complete | 11 tests | >95% | Production-ready |
+| Python     | ✅ Production-ready | 86 tests | >95% | Stable and fully tested |
+| TypeScript | ✅ Production-ready | 86 tests | >95% | Stable and fully tested |
+| Go         | ✅ Production-ready | 80 tests | >95% | Typed APIs, error returns, immutable `Quantity` |
+| Rust       | ✅ Production-ready | 52 tests + 1 doc-test | >95% | No leaks, `PartialEq`/`PartialOrd`, clippy-clean |
 
 ## Design Principles
 
@@ -221,11 +251,41 @@ npm test
 npm run test:coverage
 ```
 
+### Go
+
+```bash
+cd go
+go test -v ./...
+go test -bench=. -benchmem   # benchmarks
+```
+
+### Rust
+
+```bash
+cd rust
+cargo test
+cargo clippy --all-targets -- -D warnings
+```
+
 ## Performance
 
-The library is designed for minimal overhead:
-- **Python**: ~2-5x slower than raw float operations
-- **TypeScript**: ~2-5x slower than raw number operations
+Every operation performs a dimension check and (for add/subtract/compare) a
+unit conversion, so `Quantity` arithmetic is meaningfully slower than raw
+numeric operations. Measure with the reproducible benchmark suite in
+[`benchmarks/`](./benchmarks/) on your own hardware — results below are from a
+single run on an Intel i5-8250U and are **machine-dependent**:
+
+| Operation | Python | TypeScript | Go | Rust |
+|---|---|---|---|---|
+| Construction | ~8x | ~5x | ~17x | ~10x |
+| Addition | ~90x | ~3x | ~70x | ~95x |
+| Multiplication | ~420x | ~25x | ~80x | ~95x |
+| Division | ~160x | ~40x | ~110x | ~90x |
+| Conversion | ~60x | ~2x | ~35x | ~20x |
+
+(overhead vs. the equivalent raw numeric operation; absolute times are tens to
+hundreds of nanoseconds per operation — see `benchmarks/` for details)
+
 - **Memory**: Negligible overhead (one object per quantity)
 
 For performance-critical code, convert to raw numbers after validation:
@@ -300,7 +360,7 @@ furlong = Unit("furlong", "fur", Dimension(length=1), to_base=201.168)
 
 ### Q: What about performance?
 
-**A**: The library adds minimal overhead (2-5x) compared to raw numeric operations. For performance-critical code, extract raw values after validation.
+**A**: `Quantity` operations cost tens to hundreds of nanoseconds — roughly 5–400x a raw numeric operation depending on language and operation, because each call performs dimensional checks and unit conversion. See [`benchmarks/`](./benchmarks/) for reproducible numbers. For performance-critical code, extract raw values after validation.
 
 ## License
 
@@ -325,6 +385,6 @@ MIT License - see LICENSE file for details.
 
 ---
 
-**Last Updated**: 2026-08-28  
-**Version**: 1.0.0  
-**Status**: Production-ready for Python and TypeScript
+**Last Updated**: 2026-09-06  
+**Version**: 2.0.0  
+**Status**: Production-ready across Python, TypeScript, Go, and Rust
