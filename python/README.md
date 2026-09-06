@@ -119,6 +119,11 @@ d2 = Quantity(1, units.meter)
 # Automatic conversion for comparison
 print(d1 == d2)  # True
 print(d1 < Quantity(2, units.meter))  # True
+
+# `==` is strict exact equality (after conversion to a common unit).
+# For approximate comparison within a tolerance, use `is_close`:
+print(Quantity(1, units.meter).is_close(Quantity(1.0000001, units.meter), rel_tol=1e-6))  # True
+print(Quantity(0, units.meter).is_close(Quantity(1e-12, units.meter), abs_tol=1e-9))       # True
 ```
 
 ## Available Units
@@ -140,20 +145,29 @@ print(d1 < Quantity(2, units.meter))  # True
 ### Current
 - `ampere`, `milliampere`
 
+### Chemistry
+- `mole`
+
 ### Derived Units
 - `newton` (force)
 - `joule`, `kilojoule` (energy)
+- `calorie`, `kilocalorie`, `watt_hour` (energy)
 - `watt`, `kilowatt` (power)
 - `pascal`, `kilopascal` (pressure)
-- `meter_per_second`, `kilometer_per_hour` (velocity)
+- `meter_per_second`, `kilometer_per_hour`, `mile_per_hour` (velocity)
 - `meter_per_second_squared` (acceleration)
+- `square_meter`, `square_kilometer`, `hectare` (area)
+- `cubic_meter`, `liter`, `milliliter` (volume)
+- `hertz`, `kilohertz`, `megahertz` (frequency)
+- `radian`, `degree`, `arcminute`, `arcsecond` (angle)
+- `volt`, `ohm` (electricity)
 
 ## Error Handling
 
 The library provides clear error messages for invalid operations:
 
 ```python
-from dimensional import Quantity, units, IncompatibleUnitsError
+from dimensional import Quantity, units, IncompatibleUnitsError, AffineUnitArithmeticError
 
 distance = Quantity(100, units.meter)
 time = Quantity(10, units.second)
@@ -163,6 +177,12 @@ try:
     result = distance + time
 except IncompatibleUnitsError as e:
     print(e)  # "Cannot add m and s: incompatible dimensions"
+
+try:
+    # This will raise AffineUnitArithmeticError
+    result = Quantity(2, units.celsius) * Quantity(3, units.celsius)
+except AffineUnitArithmeticError as e:
+    print(e)  # "Cannot multiply affine units °C and °C; ..."
 ```
 
 ## Testing
@@ -209,7 +229,8 @@ Represents a unit of measurement with its dimension and conversion factor.
 
 A numeric value with an associated unit. Supports:
 - Arithmetic: `+`, `-`, `*`, `/`, `**`, `-` (negation), `abs()`
-- Comparison: `==`, `!=`, `<`, `<=`, `>`, `>=`
+- Comparison: `==`, `!=`, `<`, `<=`, `>`, `>=` (`==` is strict exact equality after conversion to a common unit)
+- Approximate comparison: `.is_close(other, rel_tol=1e-9, abs_tol=0.0)`
 - Conversion: `.to(target_unit)`
 
 ### `units`
@@ -229,6 +250,17 @@ Contributions are welcome! Please ensure:
 - Documentation is updated
 
 ## Changelog
+
+### 2.0.0 (Unreleased)
+- Added angle units: `radian`, `degree`, `arcminute`, `arcsecond`
+- Added frequency units: `kilohertz`, `megahertz`
+- Added area units: `square_kilometer`, `hectare`
+- Added volume units: `liter`, `milliliter`
+- Added velocity unit: `mile_per_hour`
+- Added chemistry unit: `mole`
+- Added energy units: `calorie`, `kilocalorie`, `watt_hour`
+- Added electricity units: `volt`, `ohm`
+- Updated canonical-unit lookup table to canonicalize Hz, m², m³, V, and Ω
 
 ### 1.0.0 (2026-08-28)
 - Initial release
